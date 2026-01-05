@@ -84,7 +84,7 @@
             animation: bounce 2s infinite;
         }
 
-        /* --- Slide 2: PE Teacher Scene (NEW) --- */
+        /* --- Slide 2: PE Teacher Scene --- */
         .scene-teacher {
             background: #ecf0f1;
             position: relative;
@@ -245,13 +245,13 @@
 
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
-        /* --- New Slide: Roles (VERTICAL Layout) --- */
+        /* --- Slide 6: Roles (ADJUSTED SIZE - MEDIUM-LARGE) --- */
         .team-vertical-container {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            gap: 15px;
+            gap: 15px; /* Reduced gap */
             width: 100%;
             height: 100%;
             overflow-y: auto;
@@ -260,9 +260,9 @@
         .student-row {
             display: flex;
             align-items: center;
-            width: 70%; /* Adjust width as needed */
+            width: 80%; /* Slightly narrower */
             background: white;
-            padding: 10px 20px;
+            padding: 12px 25px; /* Reduced padding */
             border-radius: 50px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
             transition: transform 0.2s;
@@ -272,10 +272,10 @@
         }
 
         .student-avatar-small {
-            width: 60px; height: 60px; 
+            width: 65px; height: 65px; /* Reduced from 80px */
             border-radius: 50%;
             display: flex; justify-content: center; align-items: center; 
-            font-size: 2rem;
+            font-size: 2.2rem; /* Reduced from 3rem */
             border: 3px solid white; 
             box-shadow: 0 4px 10px rgba(0,0,0,0.15);
             background-color: #bdc3c7; 
@@ -283,7 +283,7 @@
         }
 
         .student-info {
-            margin-left: 20px;
+            margin-left: 25px;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -291,23 +291,23 @@
         }
 
         .student-name {
-            font-size: 1.6rem;
+            font-size: 2rem; /* Reduced from 2.4rem */
             font-weight: bold;
             color: #34495e;
             margin-right: 15px;
         }
 
         .role-tag {
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-size: 1.3rem;
+            padding: 8px 25px; /* Reduced padding */
+            border-radius: 30px;
+            font-size: 1.6rem; /* Reduced from 2rem */
             font-weight: bold;
             color: white;
             text-align: center;
-            min-width: 150px;
+            min-width: 180px; /* Reduced width */
         }
 
-        /* --- NEW SLIDE: Kongming Lantern (Bold & Large) --- */
+        /* --- Slide 7: Kongming Lantern --- */
         .lantern-scene {
             width: 100%; height: 100%;
             position: relative;
@@ -395,7 +395,7 @@
             100% { transform: scale(1.1); opacity: 0.8; }
         }
 
-        /* --- Slide 7: Conclusion --- */
+        /* --- Slide 8: Conclusion --- */
         .conclusion-container {
             display: flex; justify-content: center; align-items: stretch; gap: 30px; 
             margin-top: 30px; width: 100%;
@@ -437,7 +437,7 @@
         </div>
     </div>
 
-    <!-- Slide 2: PE Teacher Scene (NEW) -->
+    <!-- Slide 2: PE Teacher Scene -->
     <div class="slide">
         <h2>體育課後的發現</h2>
         <p>上完體育課，老師正在收拾器材，收集了一大筐乒乓球。</p>
@@ -544,7 +544,7 @@
         </div>
     </div>
 
-    <!-- Slide 6: Group Roles (VERTICAL) -->
+    <!-- Slide 6: Group Roles (ADJUSTED SIZE) -->
     <div class="slide">
         <h2>小組分工表 (五人一組)</h2>
         <p>實驗開始前，請確認每位組員的職責：</p>
@@ -601,10 +601,10 @@
         </div>
     </div>
 
-    <!-- Slide 7 (NEW): Kongming Lantern -->
+    <!-- Slide 7: Kongming Lantern (UPDATED TEXT) -->
     <div class="slide">
         <h2>生活中的應用：孔明燈</h2>
-        <p>乒乓球變回圓形是因為內部的空氣受熱膨脹。<br><strong>孔明燈</strong>也是利用同樣的原理飛上天的喔！</p>
+        <p>瓶子上的氣球膨脹是因為瓶子內的空氣受熱膨脹。<br><strong>孔明燈</strong>也是利用同樣的原理飛上天的喔！</p>
         
         <div class="visual-box lantern-scene">
             <div class="lantern" id="sky-lantern">
@@ -630,7 +630,7 @@
         </div>
     </div>
 
-    <!-- Slide 8: Conclusion (Originally Slide 7) -->
+    <!-- Slide 8: Conclusion -->
     <div class="slide">
         <h2>課堂總結</h2>
         <div class="conclusion-container">
@@ -691,13 +691,11 @@
                 bowl.classList.remove('experiment-active');
                 const water = bowl.querySelector('.water');
                 water.classList.remove('hot');
-                const btn = document.querySelector('.action-btn'); 
-                // Resetting specific buttons
-                const expBtn = document.querySelector('button[onclick="startExperiment(this)"]');
-                if(expBtn) {
-                    expBtn.disabled = false;
-                    expBtn.innerHTML = "🧪 倒入熱水";
-                    expBtn.style.background = "#e74c3c";
+                const btn = document.querySelector('button[onclick="startExperiment(this)"]');
+                if(btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = "🧪 倒入熱水";
+                    btn.style.background = "#e74c3c";
                 }
             }
         }
