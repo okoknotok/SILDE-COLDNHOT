@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>糖果店的分數任務</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #fdf2f8;
+            margin: 0;
+        }
+        .slide {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        .slide.active {
+            display: flex;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .answer-box {
+            display: none;
+        }
+        .answer-box.show {
+            display: block;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        /* 給區塊元素用的顯示動畫 */
+        .pop-show {
+            display: block !important;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        /* 直式分數樣式 */
+        .frac {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            vertical-align: middle;
+            margin: 0 0.2em;
+            text-align: center;
+            line-height: 1.1;
+        }
+        .frac span:first-child {
+            border-bottom: 0.12em solid currentColor;
+            padding: 0 0.3em;
+        }
+        .frac span:last-child {
+            padding: 0 0.3em;
+        }
+        /* 自訂捲軸樣式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #fdf2f8; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #fbcfe8; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #f472b6; 
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col tracking-wide overflow-hidden">
+
+    <!-- 簡報內容區 -->
+    <div id="presentation" class="flex-1 overflow-y-auto w-full max-w-5xl mx-auto p-6 flex flex-col">
+        
+        <!-- Slide 1: 封面 -->
+        <div class="slide active flex-col items-center justify-center min-h-full text-center space-y-6 py-8">
+            <div class="text-7xl mb-4">🍬🏪</div>
+            <h1 class="text-4xl md:text-6xl font-black text-pink-600 drop-shadow-md tracking-wider">糖果店的分數任務</h1>
+            <p class="text-2xl text-gray-600 mt-6 font-bold">小小店長培訓班</p>
+            <p class="text-lg text-gray-500 mt-8">請按右下角箭頭或鍵盤 ➡️ 開始</p>
+        </div>
+
+        <!-- Slide 2: 溫故知新 -->
+        <div class="slide flex-col justify-center min-h-full space-y-6 px-6 py-8">
+            <h2 class="text-3xl font-bold text-yellow-600 border-b-4 border-yellow-300 pb-3 flex items-center">
+                <span class="text-4xl mr-4">🧠</span> 溫故知新：分數的秘密
+            </h2>
+            <div class="bg-white p-8 rounded-2xl shadow-lg text-xl space-y-8 text-gray-700 leading-relaxed">
+                
+                <div class="flex flex-col md:flex-row gap-6">
+                    <!-- 概念釐清 -->
+                    <div class="flex-1 bg-yellow-50 p-6 rounded-xl border-2 border-yellow-200">
+                        <h3 class="font-bold text-yellow-800 text-2xl mb-4">上一課學過...</h3>
+                        <p class="mb-4"><strong class="text-blue-500 text-2xl">分子</strong>：全個物件中的<strong class="text-blue-600">所佔份數</strong></p>
+                        <hr class="border-yellow-300 my-4">
+                        <p><strong class="text-green-600 text-2xl">分母</strong>：全個物件<strong class="text-green-700">等分成的份數</strong></p>
+                    </div>
+                    
+                    <!-- 讀出分數 -->
+                    <div class="flex-1 bg-blue-50 p-6 rounded-xl border-2 border-blue-200 flex flex-col items-center justify-center text-center">
+                        <p class="font-bold text-gray-800 mb-4">🗣️ 誰能讀出這個分數？</p>
+                        <div class="text-5xl font-black text-pink-600 bg-white px-8 py-4 rounded-2xl shadow-inner border-2 border-gray-100">
+                            <span class="frac"><span>3</span><span>4</span></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 引出重點 -->
+                <div class="bg-pink-50 p-6 rounded-xl border-l-8 border-pink-400 mt-6">
+                    <p class="font-bold text-pink-800 text-2xl mb-3">🤔 分數可以？</p>
+                    <p>除了一個物件（例如一個披薩）可以使用分數表示外，分數還有甚麼方法可以作表示？</p>
+                    <button onclick="toggleAnswer('lead-in')" class="mt-4 bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-6 rounded-full transition transform hover:scale-105 text-lg">揭曉今日重點</button>
+                    
+                    <div id="lead-in" class="answer-box mt-4 text-xl font-bold text-pink-700 bg-white p-5 rounded-lg shadow-sm border border-pink-200 leading-relaxed">
+                        ✨ 今日重點：分數也可以用來表示<strong class="text-2xl text-red-600 mx-2">「一組物品」</strong>（例如一整盒糖果）中的一部分！
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Slide 3: 活動準備 -->
+        <div class="slide flex-col justify-center min-h-full space-y-6 px-6 py-8">
+            <h2 class="text-3xl font-bold text-blue-600 border-b-4 border-blue-300 pb-3 flex items-center">
+                <span class="text-4xl mr-4">📋</span> 活動準備與規則
+            </h2>
+            <div class="bg-white p-8 rounded-2xl shadow-lg text-xl leading-relaxed space-y-5 text-gray-700">
+                <ul class="list-disc pl-8 space-y-6">
+                    <li><strong class="text-pink-500">分組合作：</strong>每 <span class="text-2xl font-bold text-blue-500 mx-1">4</span> 位同學為一組。</li>
+                    <li><strong class="text-pink-500">工具準備：</strong>每組派發糖果、盒子及小白板。</li>
+                    <li><strong class="text-pink-500">任務目標：</strong>互相幫助，在限時內討論並在白板上寫出盒子內糖果的<strong class="text-green-500 text-2xl mx-1">分數</strong>。</li>
+                    <li><strong class="text-pink-500">時間限制：</strong>每道訂單只有 <span class="text-2xl font-bold text-red-500 mx-1">2 分鐘</span> 討論時間！</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Slide 4: 訂單一 -->
+        <div class="slide flex-col justify-center min-h-full space-y-6 px-6 py-8">
+            <div class="flex justify-between items-end border-b-4 border-pink-300 pb-3">
+                <h2 class="text-3xl font-bold text-pink-600 flex items-center">
+                    <span class="text-4xl mr-4">📦</span> 訂單一：基本任務
+                </h2>
+                <span class="text-lg text-gray-500 font-bold">⏱️ 3 分鐘</span>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg text-xl space-y-8 text-gray-700 leading-relaxed">
+                <div class="bg-pink-50 p-6 rounded-xl border-l-8 border-pink-400">
+                    <p class="font-bold mb-3 text-pink-700 text-2xl">📝 任務指令：</p>
+                    <p>「請在禮盒裡放入 <strong class="text-2xl text-red-500 mx-1">10</strong> 顆糖果，其中 <strong class="text-2xl text-red-500 mx-1">5</strong> 顆是紅色，<strong class="text-2xl text-green-500 mx-1">3</strong> 顆是綠色（另外2顆不同色）。」</p>
+                </div>
+                
+                <div class="space-y-4 mt-6">
+                    <p class="font-bold text-gray-800 text-2xl">❓ 請在白板寫下答案：</p>
+                    <p class="pl-4">1. 紅色糖果佔了這盒糖果的幾分之幾？</p>
+                    <p class="pl-4">2. 綠色糖果佔了這盒糖果的幾分之幾？</p>
+                </div>
+
+                <button onclick="toggleAnswer('ans1')" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-full transition transform hover:scale-105 text-lg">顯示答案</button>
+                
+                <div id="ans1" class="answer-box bg-green-100 p-6 rounded-xl mt-4 border-2 border-green-400 text-center">
+                    <p class="text-2xl font-bold text-green-800 flex items-center justify-center gap-8">
+                        <span>紅色：<span class="text-red-600 text-4xl ml-2"><span class="frac"><span>5</span><span>10</span></span></span></span>
+                        <span>綠色：<span class="text-green-600 text-4xl ml-2"><span class="frac"><span>3</span><span>10</span></span></span></span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: 訂單二 -->
+        <div class="slide flex-col justify-center min-h-full space-y-6 px-6 py-8">
+            <div class="flex justify-between items-end border-b-4 border-purple-300 pb-3">
+                <h2 class="text-3xl font-bold text-purple-600 flex items-center">
+                    <span class="text-4xl mr-4">🧐</span> 訂單二：奇怪的客人
+                </h2>
+                <span class="text-lg text-gray-500 font-bold">⏱️ 4 分鐘</span>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg text-xl space-y-8 text-gray-700 leading-relaxed">
+                <div class="bg-purple-50 p-6 rounded-xl border-l-8 border-purple-400">
+                    <p class="font-bold mb-3 text-purple-700 text-2xl">📝 任務指令：</p>
+                    <p>看著桌上剛剛裝好的那盒糖果（總共 10 顆）。</p>
+                    <p class="mt-3 text-2xl italic text-gray-600">客人問：「請問這盒糖果裡，<strong class="text-blue-500 text-3xl mx-1">藍色</strong>佔了幾分之幾？」</p>
+                </div>
+                
+                <div class="space-y-4 mt-6">
+                    <p class="font-bold text-gray-800 text-2xl">老師引導提問：</p>
+                    <ul class="list-disc pl-8 space-y-2">
+                        <li>這盒糖果總共還是幾顆？</li>
+                        <li>裡面有幾顆藍色糖果？</li>
+                    </ul>
+                </div>
+
+                <button onclick="toggleAnswer('ans2')" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-full transition transform hover:scale-105 text-lg">顯示答案</button>
+                
+                <div id="ans2" class="answer-box bg-blue-50 p-6 rounded-xl mt-4 border-2 border-blue-400">
+                    <p class="text-2xl font-bold text-center text-blue-800 mb-4 flex items-center justify-center">
+                        藍色糖果佔了這盒糖果的 <span class="text-blue-600 text-5xl ml-4"><span class="frac"><span>0</span><span>10</span></span></span>
+                    </p>
+                    <p class="text-lg text-center text-gray-600 bg-white p-3 rounded-lg leading-relaxed">💡 <strong class="text-red-500 text-xl">小結：</strong>當我們要找的東西「一個都沒有」時，分子就是 0！</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: 訂單三 -->
+        <div class="slide flex-col justify-center min-h-full space-y-6 px-6 py-8">
+            <div class="flex justify-between items-end border-b-4 border-orange-300 pb-3">
+                <h2 class="text-3xl font-bold text-orange-600 flex items-center">
+                    <span class="text-4xl mr-4">🕵️‍♂️</span> 訂單三：神秘客人的線索
+                </h2>
+                <span class="text-lg text-gray-500 font-bold">⏱️ 5 分鐘</span>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg text-xl space-y-8 text-gray-700 leading-relaxed">
+                <div class="bg-orange-50 p-6 rounded-xl border-l-8 border-orange-400">
+                    <p class="font-bold mb-3 text-orange-700 text-2xl">📝 任務指令：「請根據線索把糖果配出來！」</p>
+                    <ul class="list-decimal pl-8 space-y-4 mt-3">
+                        <li>這盒糖果總共有 <strong class="text-2xl text-red-500 mx-1">10</strong> 顆。</li>
+                        <li class="flex items-center">其中 <strong class="text-purple-500 text-3xl mx-2"><span class="frac"><span>3</span><span>10</span></span></strong> 是紫色糖果，<strong class="text-yellow-500 text-3xl mx-2"><span class="frac"><span>5</span><span>10</span></span></strong> 是黃色糖果。</li>
+                        <li>剩下的全部都是<strong class="text-green-600 text-2xl mx-1">橙綠色</strong>糖果。</li>
+                    </ul>
+                </div>
+                
+                <div class="space-y-4 mt-6">
+                    <p class="font-bold text-gray-800 text-2xl">❓ 挑戰問題：</p>
+                    <p class="pl-4">1. 橙綠色糖果共有幾顆？</p>
+                    <p class="pl-4">2. 橙綠色糖果佔了這盒糖果的幾分之幾？</p>
+                </div>
+
+                <button onclick="toggleAnswer('ans3')" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-full transition transform hover:scale-105 text-lg">顯示答案</button>
+                
+                <div id="ans3" class="answer-box bg-orange-100 p-6 rounded-xl mt-4 border-2 border-orange-400 text-center">
+                    <p class="text-2xl font-bold text-orange-800 flex items-center justify-center gap-6">
+                        <span>共有 <span class="text-red-600 text-4xl mx-1">2</span> 顆</span>
+                        <span>&nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                        <span>佔全盒的 <span class="text-green-600 text-4xl ml-2"><span class="frac"><span>2</span><span>10</span></span></span></span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: 突發訂單 -->
+        <div class="slide flex-col justify-center min-h-full space-y-6 px-6 py-8">
+            <div class="flex justify-between items-end border-b-4 border-red-500 pb-3">
+                <h2 class="text-3xl font-bold text-red-600 flex items-center animate-pulse">
+                    <span class="text-4xl mr-4">🚨</span> 突發訂單！注意陷阱！
+                </h2>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg text-xl space-y-8 text-gray-700 border-4 border-red-200 leading-relaxed">
+                <div class="bg-red-50 p-6 rounded-xl border-l-8 border-red-500">
+                    <p class="font-bold mb-3 text-red-700 text-2xl">📝 新要求：</p>
+                    <p>客人希望在剛剛的「訂單三」中，<strong class="text-2xl text-red-600 underline mx-1">再加入 2 顆綠色糖果</strong>！</p>
+                </div>
+                
+                <div class="space-y-4 mt-6">
+                    <p class="font-bold text-gray-800 text-2xl">❓ 陷阱挑戰（請在白板寫下）：</p>
+                    <p class="pl-4">1. 現在<strong class="text-green-500 mx-1">綠色糖果</strong>佔這盒糖果的幾分之幾？</p>
+                    <p class="pl-4">2. 剛剛的<strong class="text-orange-500 mx-1">橙綠色糖果</strong>，現在佔這盒糖果的幾分之幾？</p>
+                </div>
+
+                <button onclick="toggleAnswer('ans4')" class="mt-4 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-full transition transform hover:scale-105 text-lg">揭曉陷阱答案</button>
+                
+                <div id="ans4" class="answer-box bg-red-100 p-6 rounded-xl mt-4 border-2 border-red-400 text-center">
+                    <p class="text-xl font-bold text-red-800 mb-3">⚠️ 注意！總數（分母）改變了！(10 + 2 = 12)</p>
+                    <p class="text-2xl font-bold text-gray-800 mt-4 flex items-center justify-center gap-8">
+                        <span>綠色：<span class="text-green-600 text-4xl ml-2"><span class="frac"><span>2</span><span>12</span></span></span></span>
+                        <span>橙綠色：<span class="text-orange-600 text-4xl ml-2"><span class="frac"><span>2</span><span>12</span></span></span></span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: 訂單四 -->
+        <div class="slide flex-col justify-center min-h-full space-y-6 px-6 py-8">
+            <div class="flex justify-between items-end border-b-4 border-teal-300 pb-3">
+                <h2 class="text-3xl font-bold text-teal-600 flex items-center">
+                    <span class="text-4xl mr-4">👑</span> 訂單四：自由配搭與分享
+                </h2>
+                <span class="text-lg text-gray-500 font-bold">⏱️ 13 分鐘</span>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg text-xl space-y-8 text-gray-700 leading-relaxed">
+                <div class="bg-teal-50 p-6 rounded-xl border-l-8 border-teal-400">
+                    <p class="font-bold mb-3 text-teal-700 text-2xl">📝 任務指令：「現在換你們當店長！」</p>
+                    <p>請各組自己決定挑選 <strong class="text-red-500 text-2xl mx-1">最多 12 顆</strong> 的糖果放入盤中（顏色自由搭配）。</p>
+                    <p class="mt-3">配好後，請出一道題目考考同學！</p>
+                </div>
+                
+                <div class="space-y-4 mt-6 bg-gray-50 p-6 rounded-xl border-2 border-dashed border-gray-300">
+                    <p class="font-bold text-gray-800 text-2xl">💡 出題提示：</p>
+                    <ul class="list-disc pl-8 space-y-3">
+                        <li>在小白板寫下配方（例：「我們有 4 顆紅、2 顆黃...」）</li>
+                        <li>可以問：某顏色的糖果佔了整盒糖果的幾分之幾？</li>
+                        <li>可以問：「沒有出現的顏色」佔了佔了整盒糖果的幾分之幾？</li>
+                    </ul>
+                </div>
+                <p class="text-center text-teal-600 font-bold text-2xl mt-6 animate-bounce">每位同學吃有兩分鐘時間考考同組的同學！</p>
+            </div>
+        </div>
+
+        <!-- Slide 9: 總結 -->
+        <div class="slide flex-col justify-center min-h-full space-y-6 px-6 py-8">
+            <div class="flex justify-between items-end border-b-4 border-indigo-300 pb-3">
+                <h2 class="text-3xl font-bold text-indigo-600 flex items-center">
+                    <span class="text-4xl mr-4">🌟</span> 課堂總結
+                </h2>
+                <button id="summary-btn" onclick="showNextSummary()" class="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-6 rounded-full transition transform hover:scale-105 text-base shadow-md">顯示下一個重點</button>
+            </div>
+            <div class="bg-white p-8 rounded-2xl shadow-lg text-xl space-y-8 text-gray-700 leading-relaxed min-h-[300px]">
+                
+                <div class="flex items-start space-x-4">
+                    <div class="text-3xl mt-1">1️⃣</div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-indigo-700 text-2xl mb-2">目標物品不存在時</h3>
+                        <div id="summary-desc-1" class="hidden mt-2 p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                            <p>當我們尋找的顏色「一顆都沒有」時，<strong class="text-red-500 text-2xl mx-1">分子為 0</strong>。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                    <div class="text-3xl mt-1">2️⃣</div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-indigo-700 text-2xl mb-2">分數的意義</h3>
+                        <div id="summary-desc-2" class="hidden mt-2 p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                            <p>清楚用分數表示 <strong class="text-blue-500 mx-1">「部分物品 (分子)」</strong> 佔 <strong class="text-green-600 mx-1">「全組物品總數 (分母)」</strong> 的幾分之幾。</p>
+                            
+                            <!-- 新增的水果盒範例 -->
+                            <div class="mt-5 flex flex-col md:flex-row items-center justify-center gap-6 bg-white p-5 rounded-xl border-2 border-dashed border-indigo-200 shadow-sm">
+                                <!-- 水果盒 -->
+                                <div class="flex flex-col items-center">
+                                    <div class="bg-amber-50 border-4 border-amber-300 rounded-xl p-4 flex flex-wrap gap-2 w-48 justify-center shadow-inner">
+                                        <span class="text-4xl hover:scale-110 transition cursor-default">🍎</span>
+                                        <span class="text-4xl hover:scale-110 transition cursor-default">🍎</span>
+                                        <span class="text-4xl hover:scale-110 transition cursor-default">🍎</span>
+                                        <span class="text-4xl hover:scale-110 transition cursor-default">🍌</span>
+                                        <span class="text-4xl hover:scale-110 transition cursor-default">🍌</span>
+                                    </div>
+                                    <p class="mt-3 text-gray-700 font-bold bg-amber-100 px-4 py-1 rounded-full text-base">一盒水果 (共 5 個)</p>
+                                </div>
+                                
+                                <!-- 箭頭 -->
+                                <div class="text-4xl text-indigo-300 hidden md:block">➡️</div>
+                                <div class="text-4xl text-indigo-300 block md:hidden">⬇️</div>
+                                
+                                <!-- 分數顯示區 -->
+                                <div class="flex flex-col gap-4 w-full md:w-auto">
+                                    <div class="flex items-center justify-center gap-4 bg-red-50 p-4 rounded-xl border-2 border-red-200">
+                                        <span class="text-2xl font-bold text-gray-700">🍎 蘋果佔：</span>
+                                        <span class="text-5xl text-red-600 font-black"><span class="frac"><span>3</span><span>5</span></span></span>
+                                        <div class="text-base text-gray-600 font-bold flex flex-col justify-center ml-2 space-y-2">
+                                            <span class="flex items-center gap-2"><span class="text-blue-500">← 分子</span> (蘋果數量)</span>
+                                            <span class="flex items-center gap-2"><span class="text-green-600">← 分母</span> (水果總數)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- 新增結束 -->
+
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-start space-x-4">
+                    <div class="text-3xl mt-1">3️⃣</div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-indigo-700 text-2xl mb-2">分母的敏感度</h3>
+                        <div id="summary-desc-3" class="hidden mt-2 p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                            <p>當盤子裡的糖果<strong class="text-red-500 mx-1">加入或拿走</strong>時，總數量改變了，<strong class="text-red-500 text-2xl mx-1">分母也會跟著改變！</strong></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 顯示完畢的提示 -->
+                <div id="summary-done" class="hidden text-center text-indigo-500 font-bold text-2xl mt-8 animate-bounce">
+                    🎉 恭喜各位小小店長完成今天的培訓！ 🎉
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 控制列：設定 flex-none 讓它永遠固定在最下方不被擠壓 -->
+    <div class="flex-none bg-white border-t-2 border-gray-200 p-4 flex justify-between items-center px-8 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] z-10">
+        <div class="text-gray-500 font-bold text-lg">
+            進度： <span id="slide-counter" class="text-pink-600">1</span> / <span id="total-slides">9</span>
+        </div>
+        <div class="space-x-4">
+            <button onclick="prevSlide()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-6 rounded-full transition text-base">⬅️ 上一頁</button>
+            <button onclick="nextSlide()" class="bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-6 rounded-full transition shadow-md text-base">下一頁 ➡️</button>
+        </div>
+    </div>
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const presentation = document.getElementById('presentation');
+        document.getElementById('total-slides').innerText = slides.length;
+
+        // 總結頁的計數器
+        let summaryStep = 0;
+
+        function showSlide(index) {
+            slides.forEach((slide, i) => {
+                slide.classList.remove('active');
+                if (i === index) {
+                    slide.classList.add('active');
+                }
+            });
+            document.getElementById('slide-counter').innerText = index + 1;
+            presentation.scrollTop = 0;
+
+            // 如果離開第9頁(index=8)，重置總結頁的狀態
+            if (index !== 8) {
+                summaryStep = 0;
+                for(let i=1; i<=3; i++) {
+                    let el = document.getElementById('summary-desc-' + i);
+                    if(el) {
+                        el.classList.add('hidden');
+                        el.classList.remove('pop-show');
+                    }
+                }
+                document.getElementById('summary-done').classList.add('hidden');
+                document.getElementById('summary-done').classList.remove('block');
+                document.getElementById('summary-btn').style.display = 'inline-block';
+            }
+        }
+
+        function nextSlide() {
+            if (currentSlide < slides.length - 1) {
+                currentSlide++;
+                showSlide(currentSlide);
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlide > 0) {
+                currentSlide--;
+                showSlide(currentSlide);
+            }
+        }
+
+        function toggleAnswer(id) {
+            const el = document.getElementById(id);
+            if (el.classList.contains('show')) {
+                el.classList.remove('show');
+            } else {
+                el.classList.add('show');
+                setTimeout(() => {
+                    presentation.scrollTo({
+                        top: presentation.scrollHeight,
+                        behavior: 'smooth'
+                    });
+                }, 100);
+            }
+        }
+
+        // 逐點顯示總結解釋的功能
+        function showNextSummary() {
+            summaryStep++;
+            const el = document.getElementById('summary-desc-' + summaryStep);
+            if (el) {
+                el.classList.remove('hidden');
+                el.classList.add('pop-show'); // 加上動畫顯示
+            }
+            
+            // 當三點都顯示完畢後
+            if (summaryStep >= 3) {
+                document.getElementById('summary-btn').style.display = 'none'; // 隱藏按鈕
+                setTimeout(() => {
+                    const doneMsg = document.getElementById('summary-done');
+                    doneMsg.classList.remove('hidden');
+                    doneMsg.classList.add('block');
+                }, 800);
+            }
+
+            // 往下捲動一點點確保能看到新出現的內容
+            setTimeout(() => {
+                presentation.scrollTo({
+                    top: presentation.scrollHeight,
+                    behavior: 'smooth'
+                });
+            }, 100);
+        }
+
+        // 鍵盤控制
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                // 如果在第9頁且還沒顯示完重點，按空白鍵或右鍵優先顯示重點解釋
+                if (currentSlide === 8 && summaryStep < 3) {
+                    showNextSummary();
+                } else {
+                    nextSlide();
+                }
+            } else if (e.key === 'ArrowLeft') {
+                prevSlide();
+            }
+        });
+    </script>
+</body>
+</html>
