@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>認識無人機</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+        font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+        background: #060d29; overflow: hidden;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .scaler { width: 1280px; height: 720px; transform-origin: center; }
+    .stage { width: 1280px; height: 720px; position: relative; }
+
+    .slide {
+        position: absolute; inset: 0;
+        display: none; flex-direction: column; justify-content: center;
+        padding: 48px 72px;
+        background: radial-gradient(circle at 28% 18%, #1e3a8a, #0b1437);
+        color: #fff;
+    }
+    .slide.active { display: flex; animation: fade .4s; }
+    @keyframes fade { from { opacity: 0; transform: scale(.99); } to { opacity: 1; } }
+    .center { text-align: center; align-items: center; }
+
+    h1 { font-size: 46px; color: #ffe14d; margin-bottom: 20px; letter-spacing: 1px; }
+    h2 { font-size: 30px; color: #7dd3fc; margin-bottom: 18px; font-weight: 500; }
+    p, li { font-size: 25px; line-height: 1.6; }
+    ul, ol { padding-left: 1.2em; }
+    li { margin-bottom: 14px; }
+    b { color: #ffe14d; }
+
+    .tag {
+        align-self: flex-start; background: #ffe14d; color: #1e3a8a;
+        font-size: 19px; font-weight: bold; padding: 5px 18px;
+        border-radius: 999px; margin-bottom: 22px; letter-spacing: 1px;
+    }
+    .tag.red { background: #ef4444; color: #fff; }
+    .big-emoji { font-size: 120px; margin: 10px 0; }
+
+    .card {
+        background: rgba(255,255,255,.1); border-left: 4px solid #7dd3fc;
+        border-radius: 10px; padding: 16px 24px; font-size: 24px;
+        margin: 9px 0; line-height: 1.5;
+    }
+    .card.red { border-left-color: #ef4444; }
+    .note {
+        background: rgba(255,225,77,.16); border: 1px solid #ffe14d;
+        border-radius: 12px; padding: 16px 24px; font-size: 24px;
+        margin-top: 22px; line-height: 1.55;
+    }
+
+    .grid3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 22px; margin-top: 10px; }
+    .grid2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 20px; margin-top: 10px; }
+    .box { background: rgba(255,255,255,.1); border-radius: 16px; padding: 24px 18px; text-align: center; }
+    .box .ic { font-size: 48px; }
+    .box .name { font-size: 25px; color: #ffe14d; font-weight: bold; margin: 12px 0 8px; }
+    .box .desc { font-size: 20px; color: #dbeafe; line-height: 1.5; }
+    .box .num { font-size: 40px; color: #ffe14d; font-weight: bold; }
+
+    .app { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; align-items: center; width: 100%; }
+    .fig { background: rgba(255,255,255,.06); border-radius: 20px; padding: 18px; position: relative; }
+    .fig svg, .fig img { width: 100%; height: auto; display: block; border-radius: 12px; }
+    .fig img { aspect-ratio: 11 / 8; object-fit: cover; }
+    .app .txt h1 { font-size: 42px; margin-bottom: 16px; }
+    .app .txt .card { font-size: 22px; padding: 14px 20px; margin: 8px 0; }
+    .app .txt .card b { display: inline-block; min-width: 72px; }
+
+    .sticks { display: flex; gap: 90px; justify-content: center; margin-top: 16px; }
+    .stick { text-align: center; }
+    .stick .head { font-size: 26px; color: #ffe14d; font-weight: bold; margin-bottom: 16px; }
+    .pad { width: 168px; height: 168px; border: 4px solid #7dd3fc; border-radius: 50%;
+        position: relative; margin: 0 auto; background: radial-gradient(circle, #334155, #1e293b); }
+    .pad span { position: absolute; font-size: 17px; color: #cbd5e1; }
+    .pad .u { top: 8px; left: 50%; transform: translateX(-50%); }
+    .pad .d { bottom: 8px; left: 50%; transform: translateX(-50%); }
+    .pad .l { left: 8px; top: 50%; transform: translateY(-50%); }
+    .pad .r { right: 8px; top: 50%; transform: translateY(-50%); }
+    .dot { width: 34px; height: 34px; background: #ffe14d; border-radius: 50%;
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); box-shadow: 0 0 18px #ffe14d; }
+    @keyframes thr { 0%,100%{top:50%} 25%{top:14%} 75%{top:86%} }
+    @keyframes pit { 0%,100%{top:50%;left:50%} 25%{top:14%} 50%{top:50%;left:86%} 75%{top:86%;left:50%} }
+    .pad-thr .dot { animation: thr 3s infinite; }
+    .pad-pit .dot { animation: pit 4s infinite; }
+    .cap { font-size: 21px; color: #94a3b8; margin-top: 14px; }
+
+    .ctrl { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+        display: flex; align-items: center; gap: 22px;
+        background: rgba(0,0,0,.55); padding: 8px 22px; border-radius: 999px; z-index: 10; }
+    .ctrl button { background: #ffe14d; border: none; color: #1e3a8a; width: 44px; height: 44px;
+        border-radius: 50%; font-size: 26px; cursor: pointer; font-weight: bold; }
+    .ctrl button:disabled { opacity: .3; cursor: default; }
+    .ctrl .c { color: #fff; font-size: 20px; min-width: 76px; text-align: center; }
+    .bar { position: fixed; top: 0; left: 0; height: 6px; background: #ffe14d; z-index: 20; transition: width .3s; }
+</style>
+</head>
+<body>
+<div class="bar" id="bar"></div>
+<div class="scaler" id="scaler">
+<div class="stage">
+
+    <!-- 0 封面 -->
+    <section class="slide center active">
+        <div class="big-emoji">🚁</div>
+        <h1>認識無人機</h1>
+        <h2>飛行原理、操控方式、應用與低空經濟</h2>
+    </section>
+
+    <!-- 1 是什麼 -->
+    <section class="slide">
+        <span class="tag">第一章 · 基本概念</span>
+        <h1>什麼是無人機？</h1>
+        <div class="card">無人機是一種<b>不需要駕駛員乘坐</b>、由地面遙控或程式自動操控的飛行器。</div>
+        <div class="card">它的英文是 <b>Drone</b>，正式名稱為「<b>無人飛行載具</b>」（UAV）。</div>
+        <div class="card">由於常用於高空攝影，因此也被稱為「<b>航拍機</b>」。</div>
+    </section>
+
+    <!-- 2 為什麼會飛 -->
+    <section class="slide">
+        <span class="tag">第二章 · 飛行原理</span>
+        <h1>無人機如何飛行？</h1>
+        <ul>
+            <li>螺旋槳高速旋轉時，會將大量空氣<b>向下推送</b>。</li>
+            <li>根據反作用力，空氣同時對機身產生<b>向上的力</b>，稱為「<b>升力</b>」。</li>
+            <li>當升力<b>大於機身重量</b>時，無人機便能向上升空。</li>
+        </ul>
+        <div class="note">💡 這正是牛頓第三運動定律：<b>作用力與反作用力大小相等、方向相反</b>。</div>
+    </section>
+
+    <!-- 3 飛高飛低 -->
+    <section class="slide center">
+        <span class="tag">第二章 · 飛行原理</span>
+        <h1>如何控制高度？</h1>
+        <div class="grid3" style="width:100%;">
+            <div class="box"><div class="ic">⬆️</div><div class="name">上升</div><div class="desc">提高轉速<br>升力 &gt; 重量</div></div>
+            <div class="box"><div class="ic">🟰</div><div class="name">懸停</div><div class="desc">維持轉速<br>升力 = 重量</div></div>
+            <div class="box"><div class="ic">⬇️</div><div class="name">下降</div><div class="desc">降低轉速<br>升力 &lt; 重量</div></div>
+        </div>
+        <div class="note">透過調整四個螺旋槳之間的<b>轉速差</b>，就能控制機身的高度與方向。</div>
+    </section>
+
+    <!-- 4 四種動作 -->
+    <section class="slide">
+        <span class="tag">第三章 · 飛行動作</span>
+        <h1>四種基本飛行動作</h1>
+        <div class="grid2">
+            <div class="box"><div class="ic">🆙</div><div class="name">油門（Throttle）</div><div class="desc">控制上升與下降</div></div>
+            <div class="box"><div class="ic">🔄</div><div class="name">偏航（Yaw）</div><div class="desc">控制原地左右轉向</div></div>
+            <div class="box"><div class="ic">↕️</div><div class="name">俯仰（Pitch）</div><div class="desc">控制前進與後退</div></div>
+            <div class="box"><div class="ic">↔️</div><div class="name">橫滾（Roll）</div><div class="desc">控制向左與向右平移</div></div>
+        </div>
+    </section>
+
+    <!-- 5 怎麼飛得穩 -->
+    <section class="slide">
+        <span class="tag">第四章 · 飛行控制系統</span>
+        <h1>為什麼能飛得平穩？</h1>
+        <div class="card">機身內建一台核心電腦，稱為「<b>飛行控制器</b>」（飛控），負責統籌所有動作。</div>
+        <div class="card">它配備「<b>陀螺儀</b>」與「<b>加速度計</b>」，能即時偵測機身的傾斜與晃動。</div>
+        <div class="card">一旦偵測到失衡，飛控會<b>每秒數百次</b>微調各螺旋槳轉速，自動將機身修正回平衡狀態。</div>
+    </section>
+
+    <!-- 6 遙控器 -->
+    <section class="slide">
+        <span class="tag">第五章 · 操控方式</span>
+        <h1>遙控器的操作邏輯</h1>
+        <div class="card">遙控器設有<b>左右兩支搖桿</b>，分別對應不同的飛行動作。</div>
+        <div class="card"><b>左搖桿：</b>上下控制油門（高度），左右控制偏航（轉向）。</div>
+        <div class="card"><b>右搖桿：</b>上下控制俯仰（前後），左右控制橫滾（平移）。</div>
+        <div class="note">此為最常見的「<b>美國手</b>」配置；不同習慣亦有其他搖桿設定。</div>
+    </section>
+
+    <!-- 7 搖桿動畫 -->
+    <section class="slide center">
+        <span class="tag">第五章 · 操控方式</span>
+        <h1>搖桿動作示意</h1>
+        <div class="sticks">
+            <div class="stick">
+                <div class="head">左搖桿</div>
+                <div class="pad pad-thr">
+                    <span class="u">上升</span><span class="d">下降</span>
+                    <span class="l">左轉</span><span class="r">右轉</span><div class="dot"></div>
+                </div>
+                <div class="cap">油門 + 偏航</div>
+            </div>
+            <div class="stick">
+                <div class="head">右搖桿</div>
+                <div class="pad pad-pit">
+                    <span class="u">前進</span><span class="d">後退</span>
+                    <span class="l">左移</span><span class="r">右移</span><div class="dot"></div>
+                </div>
+                <div class="cap">俯仰 + 橫滾</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 8 起飛步驟 -->
+    <section class="slide">
+        <span class="tag">第五章 · 操控方式</span>
+        <h1>標準起降流程</h1>
+        <ol>
+            <li>起飛前確認<b>電池電量</b>與螺旋槳狀態。</li>
+            <li>選擇<b>空曠、無障礙物、無人群</b>的場地。</li>
+            <li>緩慢推升左搖桿油門，使機身<b>平穩離地</b>。</li>
+            <li>以右搖桿微調方向，維持<b>穩定飛行姿態</b>。</li>
+            <li>降落時逐步收回油門，讓機身<b>輕緩著地</b>。</li>
+        </ol>
+    </section>
+
+    <!-- 9 種類 -->
+    <section class="slide">
+        <span class="tag">第六章 · 機型分類</span>
+        <h1>無人機的主要類型</h1>
+        <div class="grid3">
+            <div class="box"><div class="ic">🚁</div><div class="name">多旋翼機</div><div class="desc">具四個以上螺旋槳，可定點懸停，操控靈活，最為普及。</div></div>
+            <div class="box"><div class="ic">✈️</div><div class="name">固定翼機</div><div class="desc">具機翼結構，航速快、續航遠，適合大範圍任務。</div></div>
+            <div class="box"><div class="ic">🥽</div><div class="name">競速機（FPV）</div><div class="desc">操作者透過第一人稱視角操控，反應靈敏、速度極快。</div></div>
+        </div>
+    </section>
+
+    <!-- 10 應用總覽 -->
+    <section class="slide">
+        <span class="tag">第七章 · 實際應用</span>
+        <h1>無人機的五大應用領域</h1>
+        <div class="grid3">
+            <div class="box"><div class="ic">📷</div><div class="name">航空攝影</div><div class="desc">高空視角影像</div></div>
+            <div class="box"><div class="ic">🌾</div><div class="name">智慧農業</div><div class="desc">噴灑與監測</div></div>
+            <div class="box"><div class="ic">🚁</div><div class="name">搜救任務</div><div class="desc">災區搜尋</div></div>
+        </div>
+        <div class="grid2" style="margin-top:22px;">
+            <div class="box"><div class="ic">📦</div><div class="name">物流配送</div><div class="desc">包裹運送</div></div>
+            <div class="box"><div class="ic">🎆</div><div class="name">燈光展演</div><div class="desc">夜空編隊表演</div></div>
+        </div>
+        <div class="note">接下來，我們逐一深入了解每個應用領域。</div>
+    </section>
+
+    <!-- 11 航空攝影 -->
+    <section class="slide">
+        <span class="tag">應用 1 / 5</span>
+        <div class="app">
+            <div class="fig" data-img="photo">
+                <svg viewBox="0 0 440 320">
+                    <defs><linearGradient id="sky1" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#bfdbfe"/></linearGradient></defs>
+                    <rect width="440" height="320" fill="url(#sky1)"/>
+                    <circle cx="370" cy="60" r="34" fill="#fef9c3"/>
+                    <path d="M0,250 L110,160 L190,250 Z" fill="#4b6cb7"/>
+                    <path d="M150,250 L280,140 L410,250 Z" fill="#3b5998"/>
+                    <rect y="248" width="440" height="72" fill="#2f4878"/>
+                    <path d="M220,120 L120,300 M220,120 L330,300" stroke="#ffe14d" stroke-width="2" stroke-dasharray="6 5" opacity=".8"/>
+                    <g>
+                        <line x1="178" y1="92" x2="262" y2="112" stroke="#1e293b" stroke-width="5"/>
+                        <line x1="262" y1="92" x2="178" y2="112" stroke="#1e293b" stroke-width="5"/>
+                        <ellipse cx="178" cy="92" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="262" cy="92" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="178" cy="112" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="262" cy="112" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <rect x="202" y="90" width="36" height="22" rx="7" fill="#334155"/>
+                        <rect x="212" y="110" width="16" height="13" rx="3" fill="#0f172a"/>
+                        <circle cx="220" cy="117" r="3.5" fill="#ffe14d"/>
+                    </g>
+                </svg>
+            </div>
+            <div class="txt">
+                <h1>📷 航空攝影</h1>
+                <div class="card"><b>情境</b>拍攝風景、活動、建築與地形空照。</div>
+                <div class="card"><b>做法</b>機身下方掛載可旋轉的「<b>雲台相機</b>」，飛至高空穩定取景。</div>
+                <div class="card"><b>優勢</b>取得人力難以到達的<b>高空與大範圍視角</b>，成本遠低於直升機。</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 12 智慧農業 -->
+    <section class="slide">
+        <span class="tag">應用 2 / 5</span>
+        <div class="app">
+            <div class="fig" data-img="farm">
+                <svg viewBox="0 0 440 320">
+                    <defs><linearGradient id="sky2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#bae6fd"/><stop offset="1" stop-color="#e0f2fe"/></linearGradient></defs>
+                    <rect width="440" height="320" fill="url(#sky2)"/>
+                    <g><rect y="210" width="440" height="110" fill="#65a30d"/>
+                        <path d="M0,230 L440,222" stroke="#3f6212" stroke-width="4"/>
+                        <path d="M0,260 L440,250" stroke="#3f6212" stroke-width="5"/>
+                        <path d="M0,295 L440,282" stroke="#3f6212" stroke-width="6"/></g>
+                    <g fill="#bae6fd" opacity=".75">
+                        <circle cx="200" cy="150" r="5"/><circle cx="220" cy="165" r="6"/>
+                        <circle cx="240" cy="150" r="5"/><circle cx="210" cy="180" r="5"/>
+                        <circle cx="232" cy="185" r="5"/><circle cx="218" cy="200" r="6"/></g>
+                    <path d="M220,130 L185,205 M220,130 L255,205" stroke="#7dd3fc" stroke-width="2" opacity=".5"/>
+                    <g>
+                        <line x1="178" y1="108" x2="262" y2="128" stroke="#1e293b" stroke-width="5"/>
+                        <line x1="262" y1="108" x2="178" y2="128" stroke="#1e293b" stroke-width="5"/>
+                        <ellipse cx="178" cy="108" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="262" cy="108" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="178" cy="128" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="262" cy="128" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <rect x="200" y="106" width="40" height="22" rx="7" fill="#15803d"/>
+                        <rect x="208" y="126" width="24" height="8" rx="3" fill="#334155"/>
+                    </g>
+                </svg>
+            </div>
+            <div class="txt">
+                <h1>🌾 智慧農業</h1>
+                <div class="card"><b>情境</b>大面積農田的施藥、施肥與作物巡查。</div>
+                <div class="card"><b>做法</b>農用機搭載<b>藥箱與噴頭</b>，依規劃航線低空均勻噴灑。</div>
+                <div class="card"><b>優勢</b>效率比人工高出數十倍，並減少農民<b>直接接觸農藥</b>的風險。</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 13 搜救任務 -->
+    <section class="slide">
+        <span class="tag">應用 3 / 5</span>
+        <div class="app">
+            <div class="fig" data-img="rescue">
+                <svg viewBox="0 0 440 320">
+                    <defs><linearGradient id="sky3" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/></linearGradient></defs>
+                    <rect width="440" height="320" fill="url(#sky3)"/>
+                    <circle cx="60" cy="50" r="2" fill="#fff"/><circle cx="120" cy="30" r="1.5" fill="#fff"/>
+                    <circle cx="390" cy="45" r="2" fill="#fff"/><circle cx="320" cy="70" r="1.5" fill="#fff"/>
+                    <path d="M0,260 L130,150 L240,260 Z" fill="#334155"/>
+                    <path d="M180,260 L320,160 L440,260 Z" fill="#1e293b"/>
+                    <rect y="258" width="440" height="62" fill="#0b1120"/>
+                    <path d="M220,118 L150,280 L300,280 Z" fill="#fde047" opacity=".25"/>
+                    <circle cx="225" cy="280" r="14" fill="#ef4444" opacity=".4"/>
+                    <circle cx="225" cy="280" r="7" fill="#fca5a5"/>
+                    <g>
+                        <line x1="178" y1="98" x2="262" y2="118" stroke="#0f172a" stroke-width="5"/>
+                        <line x1="262" y1="98" x2="178" y2="118" stroke="#0f172a" stroke-width="5"/>
+                        <ellipse cx="178" cy="98" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="262" cy="98" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="178" cy="118" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="262" cy="118" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <rect x="202" y="96" width="36" height="22" rx="7" fill="#475569"/>
+                        <circle cx="220" cy="120" r="5" fill="#fde047"/>
+                    </g>
+                </svg>
+            </div>
+            <div class="txt">
+                <h1>🚁 搜救任務</h1>
+                <div class="card"><b>情境</b>山難、地震或水災中尋找受困人員。</div>
+                <div class="card"><b>做法</b>搭載<b>熱成像鏡頭與探照燈</b>，深入危險或人力難及的區域。</div>
+                <div class="card"><b>優勢</b>能於<b>夜間與惡劣環境</b>快速搜索，並避免救難人員身陷險境。</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 14 物流配送 -->
+    <section class="slide">
+        <span class="tag">應用 4 / 5</span>
+        <div class="app">
+            <div class="fig" data-img="delivery">
+                <svg viewBox="0 0 440 320">
+                    <defs><linearGradient id="sky4" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#93c5fd"/><stop offset="1" stop-color="#dbeafe"/></linearGradient></defs>
+                    <rect width="440" height="320" fill="url(#sky4)"/>
+                    <ellipse cx="100" cy="70" rx="40" ry="18" fill="#fff" opacity=".8"/>
+                    <ellipse cx="350" cy="50" rx="34" ry="15" fill="#fff" opacity=".8"/>
+                    <rect y="250" width="440" height="70" fill="#86efac"/>
+                    <g><rect x="300" y="200" width="90" height="55" fill="#fcd34d"/>
+                        <path d="M295,200 L345,165 L395,200 Z" fill="#b91c1c"/>
+                        <rect x="335" y="222" width="22" height="33" fill="#92400e"/></g>
+                    <line x1="180" y1="120" x2="180" y2="175" stroke="#475569" stroke-width="2"/>
+                    <rect x="160" y="175" width="40" height="36" rx="4" fill="#c2853a"/>
+                    <path d="M160,193 L200,193 M180,175 L180,211" stroke="#92400e" stroke-width="3"/>
+                    <g>
+                        <line x1="138" y1="100" x2="222" y2="120" stroke="#1e293b" stroke-width="5"/>
+                        <line x1="222" y1="100" x2="138" y2="120" stroke="#1e293b" stroke-width="5"/>
+                        <ellipse cx="138" cy="100" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="222" cy="100" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="138" cy="120" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <ellipse cx="222" cy="120" rx="16" ry="5" fill="#7dd3fc" opacity=".7"/>
+                        <rect x="162" y="98" width="36" height="22" rx="7" fill="#334155"/>
+                    </g>
+                </svg>
+            </div>
+            <div class="txt">
+                <h1>📦 物流配送</h1>
+                <div class="card"><b>情境</b>將藥品、文件或小型包裹送往目的地。</div>
+                <div class="card"><b>做法</b>機身固定貨艙或吊掛貨物，依<b>GPS 航線</b>自動飛抵後投放。</div>
+                <div class="card"><b>優勢</b>不受地面交通影響，特別適合<b>偏遠地區與緊急醫療</b>運送。</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 15 燈光展演 -->
+    <section class="slide">
+        <span class="tag">應用 5 / 5</span>
+        <div class="app">
+            <div class="fig" data-img="light">
+                <svg viewBox="0 0 440 320">
+                    <defs><radialGradient id="sky5" cx="50%" cy="40%" r="70%">
+                        <stop offset="0" stop-color="#1e1b4b"/><stop offset="1" stop-color="#020617"/></radialGradient>
+                        <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/>
+                        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+                    <rect width="440" height="320" fill="url(#sky5)"/>
+                    <g fill="#ffe14d" filter="url(#glow)">
+                        <circle cx="180" cy="95" r="5"/><circle cx="160" cy="80" r="5"/>
+                        <circle cx="200" cy="80" r="5"/><circle cx="148" cy="100" r="5"/>
+                        <circle cx="212" cy="100" r="5"/><circle cx="155" cy="120" r="5"/>
+                        <circle cx="205" cy="120" r="5"/><circle cx="170" cy="140" r="5"/>
+                        <circle cx="190" cy="140" r="5"/><circle cx="180" cy="158" r="5"/></g>
+                    <g fill="#7dd3fc" filter="url(#glow)">
+                        <circle cx="290" cy="90" r="5"/><circle cx="310" cy="78" r="5"/>
+                        <circle cx="330" cy="90" r="5"/><circle cx="290" cy="115" r="5"/>
+                        <circle cx="330" cy="115" r="5"/><circle cx="290" cy="140" r="5"/>
+                        <circle cx="310" cy="140" r="5"/><circle cx="330" cy="140" r="5"/></g>
+                    <rect y="270" width="440" height="50" fill="#0b1120"/>
+                    <g fill="#1e293b">
+                        <circle cx="60" cy="270" r="12"/><circle cx="100" cy="272" r="14"/>
+                        <circle cx="150" cy="270" r="12"/><circle cx="300" cy="272" r="13"/>
+                        <circle cx="350" cy="270" r="12"/><circle cx="390" cy="272" r="14"/></g>
+                </svg>
+            </div>
+            <div class="txt">
+                <h1>🎆 燈光展演</h1>
+                <div class="card"><b>情境</b>節慶或活動中的大型夜空表演。</div>
+                <div class="card"><b>做法</b>數百至數千架機載 LED，由電腦<b>統一定位編程</b>，同步排出立體圖案。</div>
+                <div class="card"><b>優勢</b>無煙火污染、可<b>重複使用並變換造型</b>，成為新興的環保展演形式。</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 16 低空經濟 開篇 -->
+    <section class="slide center">
+        <span class="tag red">專題 · 低空經濟</span>
+        <div class="big-emoji">🛫</div>
+        <h1>中國的「低空經濟」</h1>
+        <h2>當無人機從「工具」走向「新興產業」</h2>
+    </section>
+
+    <!-- 17 低空經濟 定義 -->
+    <section class="slide">
+        <span class="tag red">專題 · 低空經濟</span>
+        <h1>什麼是低空經濟？</h1>
+        <div class="card red">指在<b>真高 1,000 公尺以下</b>（必要時可拓展至 3,000 公尺）的低空空域內，由各類載人與無人飛行器活動所帶動的綜合性經濟形態。</div>
+        <div class="card red">它以無人機、<b>eVTOL（電動垂直起降飛行器）</b>等為載體，串聯製造、運營、保障與配套服務。</div>
+        <div class="card red">2024 年，「低空經濟」首次被寫入中國<b>《政府工作報告》</b>，並列為國家培育的<b>戰略性新興產業</b>與「新質生產力」代表之一。</div>
+        <div class="note">📌 核心理念：把過去少有利用的「<b>低空空域</b>」，轉化為可創造產值的新經濟空間。</div>
+    </section>
+
+    <!-- 18 低空經濟 應用方向 -->
+    <section class="slide">
+        <span class="tag red">專題 · 低空經濟</span>
+        <h1>低空經濟的發展方向</h1>
+        <div class="grid3">
+            <div class="box"><div class="ic">🚁</div><div class="name">城市空中交通</div><div class="desc">eVTOL「空中計程車」、跨城市點對點接駁。</div></div>
+            <div class="box"><div class="ic">📦</div><div class="name">無人機物流</div><div class="desc">外賣、快遞、醫療樣本的常態化空中配送。</div></div>
+            <div class="box"><div class="ic">🌾</div><div class="name">農業與巡檢</div><div class="desc">植保噴灑、電力與管線的自動化巡查。</div></div>
+        </div>
+        <div class="grid3" style="margin-top:22px;">
+            <div class="box"><div class="ic">🚑</div><div class="name">應急救援</div><div class="desc">災區運補、空中消防與醫療急送。</div></div>
+            <div class="box"><div class="ic">🧭</div><div class="name">空中遊覽</div><div class="desc">低空觀光、體驗飛行等文旅服務。</div></div>
+            <div class="box"><div class="ic">🛰️</div><div class="name">基礎設施</div><div class="desc">起降場、空管系統與通訊定位網。</div></div>
+        </div>
+    </section>
+
+    <!-- 19 低空經濟 城市與數據 -->
+    <section class="slide">
+        <span class="tag red">專題 · 低空經濟</span>
+        <h1>代表進展與市場規模</h1>
+        <div class="app">
+            <div class="fig" data-img="city">
+                <svg viewBox="0 0 440 320">
+                    <defs><linearGradient id="sky6" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#fda4af"/><stop offset="1" stop-color="#fde68a"/></linearGradient></defs>
+                    <rect width="440" height="320" fill="url(#sky6)"/>
+                    <circle cx="360" cy="60" r="30" fill="#fff" opacity=".7"/>
+                    <!-- 城市天際線 -->
+                    <g fill="#4b5563">
+                        <rect x="20" y="180" width="40" height="140"/>
+                        <rect x="72" y="140" width="46" height="180"/>
+                        <rect x="128" y="200" width="38" height="120"/>
+                        <rect x="176" y="120" width="52" height="200"/>
+                        <rect x="238" y="170" width="42" height="150"/>
+                        <rect x="290" y="150" width="48" height="170"/>
+                        <rect x="348" y="195" width="40" height="125"/>
+                        <rect x="396" y="165" width="38" height="155"/></g>
+                    <g fill="#fde68a" opacity=".85">
+                        <rect x="84" y="155" width="9" height="12"/><rect x="100" y="155" width="9" height="12"/>
+                        <rect x="188" y="135" width="9" height="12"/><rect x="206" y="135" width="9" height="12"/>
+                        <rect x="302" y="165" width="9" height="12"/><rect x="320" y="165" width="9" height="12"/></g>
+                    <!-- eVTOL 載人飛行器 -->
+                    <g>
+                        <rect x="186" y="70" width="60" height="22" rx="11" fill="#1e3a8a"/>
+                        <rect x="196" y="74" width="40" height="9" rx="4" fill="#7dd3fc"/>
+                        <line x1="160" y1="64" x2="272" y2="64" stroke="#1e293b" stroke-width="4"/>
+                        <ellipse cx="166" cy="64" rx="14" ry="4" fill="#334155"/>
+                        <ellipse cx="206" cy="64" rx="14" ry="4" fill="#334155"/>
+                        <ellipse cx="226" cy="64" rx="14" ry="4" fill="#334155"/>
+                        <ellipse cx="266" cy="64" rx="14" ry="4" fill="#334155"/>
+                        <line x1="166" y1="64" x2="166" y2="70" stroke="#1e293b" stroke-width="3"/>
+                        <line x1="266" y1="64" x2="266" y2="70" stroke="#1e293b" stroke-width="3"/>
+                    </g>
+                    <!-- 物流無人機 -->
+                    <g>
+                        <line x1="60" y1="110" x2="120" y2="124" stroke="#1e293b" stroke-width="4"/>
+                        <line x1="120" y1="110" x2="60" y2="124" stroke="#1e293b" stroke-width="4"/>
+                        <rect x="78" y="108" width="24" height="16" rx="5" fill="#b91c1c"/></g>
+                </svg>
+            </div>
+            <div class="txt">
+                <div class="card red"><b>深圳</b>被視為「低空經濟第一城」，率先立法並建設大量無人機起降點。</div>
+                <div class="card red"><b>廣州・億航</b>的 EH216-S 取得全球首張載人無人駕駛航空器適航認證。</div>
+                <div class="card red"><b>市場規模</b>2023 年已逾人民幣 <b>5,000 億元</b>，多份預測指 2030 年有望達 <b>2 兆元</b>級別。</div>
+                <div class="note" style="font-size:18px;margin-top:14px;">數據為公開估算，僅供教學參考。</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 20 安全 -->
+    <section class="slide">
+        <span class="tag">第八章 · 安全規範</span>
+        <h1>飛行安全須知</h1>
+        <div class="grid2">
+            <div class="box"><div class="ic">🙅</div><div class="desc">避免於<b>人群上空</b>飛行</div></div>
+            <div class="box"><div class="ic">🛫</div><div class="desc">遠離<b>機場與航道</b>等禁航區</div></div>
+            <div class="box"><div class="ic">👀</div><div class="desc">保持<b>目視範圍</b>，避免失聯</div></div>
+            <div class="box"><div class="ic">📋</div><div class="desc">遵守<b>當地法規</b>與飛行限制</div></div>
+        </div>
+    </section>
+
+    <!-- 21 結尾 -->
+    <section class="slide center">
+        <div class="big-emoji">🚁</div>
+        <h1>結語</h1>
+        <h2>從飛行原理到低空經濟，探索無人機的未來</h2>
+    </section>
+
+</div>
+</div>
+
+<div class="ctrl">
+    <button id="prev">‹</button>
+    <span class="c" id="counter">1 / 22</span>
+    <button id="next">›</button>
+</div>
+
+<script>
+    /* ===========================================================
+       想換成真實照片？把網址貼進下面對應欄位即可（留空則用插圖）。
+       注意：在本預覽視窗中，只有少數圖庫網域可載入；
+            檔案下載到自己電腦或網站使用時則不受限制。
+       =========================================================== */
+    const IMAGES = {
+        photo:    "https://img.freepik.com/premium-photo/hightech-drone-flying-sky-drone-with-professional-camera-takes-pictures-copter-with-high-resolution-digital-camera-modern-technology-3d-rendering_429124-2601.jpg",   // 航空攝影
+        farm:     "https://s3-ap-northeast-1.amazonaws.com/pro360-page/category_page/aerial_photography.jpg",   // 智慧農業
+        rescue:   "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRt4kjOnh79kgO4No1DlE8IbUhXrFlascCw1Q&s",   // 搜救任務
+        delivery: "https://imagepphcloud.thepaper.cn/pph/image/211/331/476.jpg",   // 物流配送
+        light:    "https://storage.ctinews.com/compression/files/default/cut-1767194286-e0LcgXO.png",   // 燈光展演
+        city:     "https://custom-images.strikinglycdn.com/res/hrscywv4p/image/upload/c_limit,fl_lossy,h_9000,w_1200,f_auto,q_auto/8491023/957211_289192.jpeg"    // 低空經濟城市
+    };
+
+    // 套用使用者圖片
+    document.querySelectorAll('.fig[data-img]').forEach(fig => {
+        const key = fig.getAttribute('data-img');
+        const url = IMAGES[key];
+        if (url && url.trim()) {
+            const img = document.createElement('img');
+            img.src = url.trim();
+            img.alt = key;
+            img.onerror = () => { img.remove(); fig.querySelector('svg').style.display = 'block'; };
+            fig.querySelector('svg').style.display = 'none';
+            fig.appendChild(img);
+        }
+    });
+
+    const scaler = document.getElementById('scaler');
+    function fit(){
+        const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+        scaler.style.transform = 'scale(' + s + ')';
+    }
+    window.addEventListener('resize', fit); fit();
+
+    const slides = document.querySelectorAll('.slide');
+    const total = slides.length;
+    let cur = 0;
+    const counter = document.getElementById('counter');
+    const bar = document.getElementById('bar');
+    const prev = document.getElementById('prev');
+    const next = document.getElementById('next');
+
+    function show(i){
+        cur = Math.max(0, Math.min(total - 1, i));
+        slides.forEach((s, idx) => s.classList.toggle('active', idx === cur));
+        counter.textContent = (cur + 1) + ' / ' + total;
+        bar.style.width = ((cur + 1) / total * 100) + '%';
+        prev.disabled = cur === 0;
+        next.disabled = cur === total - 1;
+    }
+    next.onclick = () => show(cur + 1);
+    prev.onclick = () => show(cur - 1);
+    document.addEventListener('keydown', e => {
+        if (e.key === 'ArrowRight' || e.key === ' ') show(cur + 1);
+        if (e.key === 'ArrowLeft') show(cur - 1);
+    });
+    let sx = 0;
+    document.addEventListener('touchstart', e => sx = e.touches[0].clientX);
+    document.addEventListener('touchend', e => {
+        const dx = e.changedTouches[0].clientX - sx;
+        if (dx < -50) show(cur + 1);
+        if (dx > 50) show(cur - 1);
+    });
+    show(0);
+</script>
+</body>
+</html>
