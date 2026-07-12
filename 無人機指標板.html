@@ -1,0 +1,2082 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>無人機足球戰術板 v3.0（2D / 3D＋動畫）</title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+/* 只有在 THREE 成功載入後才注入 OrbitControls，避免離線時必然出現的 ReferenceError */
+(function(){
+  if (!window.THREE) return;
+  var s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+  s.onload  = function(){ if (window.__on3DLib) window.__on3DLib(true); };
+  s.onerror = function(){ window.__OC_FAILED = true; if (window.__on3DLib) window.__on3DLib(false); };
+  document.head.appendChild(s);
+})();
+</script>
+<style>
+  :root{
+    --bg:#12161c; --panel:#1a2027; --panel2:#20262e; --line:#333d49;
+    --text:#dfe6ee; --muted:#8b98a7; --accent:#3aa1ff; --danger:#e5534b;
+    --ok:#7ee787; --err:#ff7b72; --sel:#ffd60a;
+    color-scheme: dark;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"Segoe UI","Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    font-size:14px; min-height:100vh;
+    --reserve:355px;   /* 供球場 max-width 計算：工具列+狀態列+時間軸的保留高度 */
+  }
+  body.collapsed{ --reserve:95px; }
+  body.collapsed .statusbar{ display:none; }
+  .hidden{ display:none !important; }
+
+  /* ===== 頂部工具列 ===== */
+  header{
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:10px 14px; background:var(--panel);
+    border-bottom:1px solid var(--line);
+  }
+  body.collapsed header{ display:none; }
+  body.collapsed .panel{ display:none; }
+  body.collapsed .layout{ padding:8px 10px; }
+  .brand{ font-size:16px; font-weight:700; letter-spacing:.5px; white-space:nowrap; }
+  .brand .ver{ font-size:11px; color:var(--muted); font-weight:400; margin-left:4px; }
+  .toolbar{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .toolbar .sep, .tl-transport .sep{ width:1px; height:22px; background:var(--line); margin:0 4px; }
+  button{
+    background:var(--panel2); color:var(--text);
+    border:1px solid var(--line); border-radius:6px;
+    padding:7px 12px; font-size:13px; cursor:pointer;
+    display:inline-flex; align-items:center; gap:6px;
+    transition:background .12s, border-color .12s;
+    touch-action:manipulation;
+  }
+  button:hover{ background:#2b3440; border-color:#465362; }
+  button:active{ transform:translateY(1px); }
+  button:disabled{ opacity:.45; cursor:not-allowed; }
+  button:disabled:hover{ background:var(--panel2); border-color:var(--line); }
+  button.primary{ background:#1c4d7c; border-color:#2f6ca6; }
+  button.primary:hover{ background:#235e96; }
+  button.danger{ color:#ffb3ad; border-color:#6e3934; }
+  button.danger:hover{ background:#4a2320; }
+  .mode-group{ display:flex; }
+  .mode-group button{ border-radius:0; }
+  .mode-group button:first-child{ border-radius:6px 0 0 6px; }
+  .mode-group button:last-child{ border-radius:0 6px 6px 0; border-left:none; }
+  .mode-group button.primary{ font-weight:700; }
+  .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .dot.red{ background:#e53935; } .dot.blue{ background:#1e88e5; } .dot.ball{ background:#fb8c00; }
+
+  /* 收合後的浮動展開按鈕 */
+  #btnExpand{
+    position:fixed; top:8px; left:8px; z-index:60;
+    background:rgba(26,32,39,.92); backdrop-filter:blur(3px);
+    box-shadow:0 2px 10px rgba(0,0,0,.5);
+  }
+
+  /* ===== 主要版面 ===== */
+  .layout{ display:flex; gap:14px; padding:14px; align-items:flex-start; }
+  .board-wrap{ flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; }
+
+  .board, .board3d{
+    position:relative; width:100%; aspect-ratio:30/17;
+    max-width:max(320px, calc((100vh - var(--reserve)) * 1.7647));
+    max-width:max(320px, calc((100dvh - var(--reserve)) * 1.7647));
+    margin:0 auto; border-radius:10px; overflow:hidden;
+    box-shadow:0 6px 24px rgba(0,0,0,.5), inset 0 0 0 1px #000;
+    user-select:none; -webkit-user-select:none; touch-action:none;
+  }
+  .board{ background:#20262e; }
+  .board3d{ background:#0d1117; }
+  .court{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  .pieces-layer{ position:absolute; inset:0; }
+
+  .board3d canvas{ display:block; width:100% !important; height:100% !important; }
+  .cam-btns{
+    position:absolute; top:8px; right:8px; display:flex; gap:6px; z-index:5;
+    flex-wrap:wrap; justify-content:flex-end; max-width:75%;
+  }
+  .cam-btns button{
+    padding:5px 10px; font-size:12px;
+    background:rgba(26,32,39,.85); backdrop-filter:blur(3px);
+  }
+  .view3d-hint{
+    position:absolute; left:10px; bottom:8px; z-index:5;
+    font-size:11px; color:rgba(230,238,246,.55); pointer-events:none;
+  }
+  .board3d .err-overlay{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:var(--err); font-size:14px; text-align:center; padding:20px; z-index:6;
+    background:rgba(13,17,23,.9); line-height:1.8;
+  }
+
+  /* ===== 棋子（2D）===== */
+  .piece{
+    position:absolute; transform:translate(-50%,-50%);
+    touch-action:none; cursor:grab; z-index:1;
+    -webkit-touch-callout:none;
+  }
+  .piece .disc{
+    width:34px; height:34px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:14px; color:#fff;
+    border:2px solid rgba(255,255,255,.85);
+    box-shadow:0 2px 6px rgba(0,0,0,.5);
+    transition:transform .12s, box-shadow .12s;
+    text-shadow:0 1px 2px rgba(0,0,0,.6);
+  }
+  .team-red  .disc{ background:radial-gradient(circle at 30% 28%, #ff8a7e, #c62828 70%, #8e1a1a); }
+  .team-blue .disc{ background:radial-gradient(circle at 30% 28%, #7db6ff, #1565c0 70%, #0d3f78); }
+  .team-ball .disc{
+    width:40px; height:40px;
+    background:
+      radial-gradient(circle at 50% 30%, rgba(120,58,0,.85) 0 3px, transparent 3.5px),
+      radial-gradient(circle at 30% 55%, rgba(120,58,0,.80) 0 3px, transparent 3.5px),
+      radial-gradient(circle at 70% 55%, rgba(120,58,0,.80) 0 3px, transparent 3.5px),
+      radial-gradient(circle at 40% 78%, rgba(120,58,0,.75) 0 2.6px, transparent 3px),
+      radial-gradient(circle at 62% 78%, rgba(120,58,0,.75) 0 2.6px, transparent 3px),
+      radial-gradient(circle at 30% 28%, #ffcf8a, #f57c00 65%, #b35400);
+  }
+  .piece:not(.dragging):hover .disc{ transform:scale(1.07); }
+  .piece.dragging{ cursor:grabbing; z-index:9; }
+  .piece.dragging .disc{ transform:scale(1.12); box-shadow:0 8px 18px rgba(0,0,0,.55); }
+  .piece.selected{ z-index:5; }
+  .piece.selected .disc{
+    outline:3px solid var(--sel); outline-offset:2px;
+    box-shadow:0 0 14px rgba(255,214,10,.65), 0 2px 6px rgba(0,0,0,.5);
+  }
+  /* 朝向箭頭（旋轉角度 0° = 朝右） */
+  .piece .dir{ position:absolute; inset:0; pointer-events:none; }
+  .piece .dir i{
+    position:absolute; top:50%; right:-5px; margin-top:-4px;
+    width:0; height:0;
+    border-top:4px solid transparent; border-bottom:4px solid transparent;
+    border-left:7px solid #fff;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.7));
+  }
+  .piece .tag{
+    position:absolute; top:100%; left:50%; transform:translateX(-50%);
+    margin-top:3px; font-size:11px; line-height:1.3;
+    background:rgba(8,12,18,.8); color:#e8edf3;
+    padding:1px 7px; border-radius:9px; white-space:nowrap;
+    border:1px solid rgba(255,255,255,.12);
+  }
+  .piece .tag .h{ color:#ffd57e; font-weight:600; margin-left:4px; }
+
+  /* ===== 狀態列 ===== */
+  .statusbar{
+    display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:7px 12px; font-size:12.5px; color:var(--muted);
+  }
+  .statusbar b{ color:var(--text); font-weight:600; }
+  #statMsg{ margin-left:auto; font-weight:600; }
+  #statMsg.ok{ color:var(--ok); } #statMsg.err{ color:var(--err); }
+
+  /* ===== 戰術步驟時間軸 ===== */
+  .timeline{
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; display:flex; flex-direction:column; gap:6px;
+  }
+  .tl-row{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .tl-transport{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .tl-transport button{ padding:7px 11px; }
+  #btnRec.rec-on{
+    background:#5a1e1a; border-color:#c74038; color:#ffb3ad;
+    animation:recPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes recPulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(229,83,75,.5);} 50%{ box-shadow:0 0 0 5px rgba(229,83,75,0);} }
+  .tl-steps{
+    flex:1; min-width:180px; min-height:52px;
+    display:flex; gap:6px; align-items:stretch;
+    overflow-x:auto; overflow-y:hidden; padding:3px 2px;
+    -webkit-overflow-scrolling:touch; position:relative;
+  }
+  .tl-steps.disabled{ pointer-events:none; opacity:.55; }
+  .chip{
+    flex-shrink:0; min-width:96px; max-width:170px;
+    position:relative; overflow:hidden; cursor:pointer;
+    background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+    padding:5px 10px 8px; touch-action:manipulation;
+  }
+  .chip:hover{ border-color:#465362; }
+  .chip.sel{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent), 0 0 10px rgba(58,161,255,.25); }
+  .chip .ord{ font-size:10.5px; color:var(--muted); }
+  .chip .trk{ color:#ff8f86; font-size:10px; }
+  .chip .nm{
+    display:block; font-size:12.5px; font-weight:600; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .chip .du{ font-size:10.5px; color:var(--muted); }
+  .chip .prog{
+    position:absolute; left:0; bottom:0; height:3px; width:0%;
+    background:var(--accent); pointer-events:none;
+  }
+  .tl-edit{
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+    border-top:1px dashed var(--line); padding-top:7px;
+    font-size:12.5px; color:var(--muted);
+  }
+  .tl-edit input{
+    background:var(--panel2); color:var(--text);
+    border:1px solid var(--line); border-radius:6px;
+    padding:6px 8px; font-size:13px; outline:none;
+  }
+  .tl-edit input:focus{ border-color:var(--accent); }
+  #stName{ width:150px; } #stDur{ width:72px; }
+  #stTrackInfo{ color:#ffb59d; }
+  .tl-hint{ display:none; }
+
+  /* ===== 右側屬性面板 ===== */
+  .panel{
+    width:272px; flex-shrink:0; background:var(--panel);
+    border:1px solid var(--line); border-radius:10px; padding:14px;
+  }
+  .panel h2{
+    margin:0 0 12px; font-size:14px; letter-spacing:1px;
+    color:var(--muted); text-transform:uppercase;
+    border-bottom:1px solid var(--line); padding-bottom:8px;
+  }
+  .panel .hint{ color:var(--muted); font-size:13px; line-height:1.6; padding:8px 0 14px; }
+  .panel label{ display:block; margin-bottom:12px; font-size:12.5px; color:var(--muted); }
+  .panel input[type=text], .panel input[type=number], .panel select{
+    display:block; width:100%; margin-top:4px;
+    background:var(--panel2); color:var(--text);
+    border:1px solid var(--line); border-radius:6px;
+    padding:7px 9px; font-size:14px; outline:none;
+  }
+  .panel input:focus, .panel select:focus{ border-color:var(--accent); }
+  .hrow{ display:flex; gap:8px; align-items:center; margin-top:4px; }
+  .hrow input[type=range]{ flex:1; accent-color:var(--accent); }
+  .hrow input[type=number]{ width:76px; margin-top:0; }
+  .meta{
+    font-family:ui-monospace,Consolas,monospace; font-size:11.5px;
+    color:var(--muted); background:var(--panel2);
+    border:1px solid var(--line); border-radius:6px;
+    padding:8px 10px; line-height:1.7; margin-bottom:12px; word-break:break-all;
+  }
+  .panel-actions{ display:flex; gap:8px; }
+  .panel-actions button{ flex:1; justify-content:center; }
+  .legend{
+    margin-top:16px; border-top:1px solid var(--line); padding-top:10px;
+    font-size:11.5px; color:var(--muted); line-height:2;
+  }
+  .legend .dot{ vertical-align:-1px; margin-right:5px; }
+  kbd{
+    background:var(--panel2); border:1px solid var(--line); border-bottom-width:2px;
+    border-radius:4px; padding:0 5px; font-size:10.5px; font-family:inherit;
+  }
+
+  /* ===== 匯入/匯出 Modal ===== */
+  .modal-back{
+    position:fixed; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(2px);
+    display:flex; align-items:center; justify-content:center; z-index:100; padding:16px;
+  }
+  .modal{
+    width:100%; max-width:560px; background:var(--panel);
+    border:1px solid var(--line); border-radius:12px;
+    box-shadow:0 12px 40px rgba(0,0,0,.6);
+    display:flex; flex-direction:column; max-height:86vh;
+  }
+  .modal-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px; border-bottom:1px solid var(--line);
+  }
+  .modal-head h3{ margin:0; font-size:15px; }
+  .modal textarea{
+    margin:14px 16px 0; height:240px; resize:vertical;
+    background:var(--panel2); color:var(--text);
+    border:1px solid var(--line); border-radius:8px;
+    padding:10px; font-family:ui-monospace,Consolas,monospace; font-size:12px;
+    outline:none;
+  }
+  .modal textarea:focus{ border-color:var(--accent); }
+  #modalMsg{ padding:6px 18px 0; font-size:12.5px; min-height:22px; }
+  #modalMsg.ok{ color:var(--ok); } #modalMsg.err{ color:var(--err); }
+  .modal-foot{ display:flex; justify-content:flex-end; padding:10px 16px 14px; }
+  .modal-foot > div{ display:flex; gap:8px; }
+  .filebtn{
+    background:var(--panel2); border:1px solid var(--line); border-radius:6px;
+    padding:7px 12px; font-size:13px; cursor:pointer; display:inline-flex; align-items:center;
+    touch-action:manipulation;
+  }
+  .filebtn:hover{ background:#2b3440; }
+
+  /* ===== 響應式（iPad 直向 / 手機：面板移到下方）===== */
+  @media (max-width: 940px){
+    .layout{ flex-direction:column; }
+    .panel{ width:100%; }
+    .board, .board3d{ max-width:none; }
+  }
+  /* 觸控裝置：加大可點面積 */
+  @media (pointer: coarse){
+    button{ padding:9px 13px; font-size:13.5px; }
+    .cam-btns button{ padding:7px 11px; }
+    .chip{ min-width:104px; padding:7px 12px 10px; }
+    .piece .disc{ width:38px; height:38px; }
+    .team-ball .disc{ width:44px; height:44px; }
+    .hrow input[type=range]{ min-height:30px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">🛸 無人機足球戰術板 <span class="ver">v3.0（2D / 3D＋動畫）</span></div>
+  <div class="toolbar">
+    <div class="mode-group">
+      <button id="btnMode2d" class="primary">2D</button>
+      <button id="btnMode3d">3D</button>
+    </div>
+    <span class="sep"></span>
+    <button id="btnAddRed"><span class="dot red"></span>新增紅方</button>
+    <button id="btnAddBlue"><span class="dot blue"></span>新增藍方</button>
+    <button id="btnAddBall"><span class="dot ball"></span>新增足球</button>
+    <span class="sep"></span>
+    <button id="btnDup">複製</button>
+    <button id="btnDel" class="danger">刪除</button>
+    <span class="sep"></span>
+    <button id="btnSave" class="primary">儲存</button>
+    <button id="btnLoad">載入</button>
+    <span class="sep"></span>
+    <button id="btnExport">匯出 JSON</button>
+    <button id="btnImport">匯入 JSON</button>
+    <span class="sep"></span>
+    <button id="btnReset">重設</button>
+    <span class="sep"></span>
+    <button id="btnCollapse" title="收合工具列與面板，最大化顯示場地">⤢ 收合介面</button>
+  </div>
+</header>
+
+<!-- 收合後的浮動展開按鈕 -->
+<button id="btnExpand" class="hidden" title="展開工具列">☰ 工具列</button>
+
+<main class="layout">
+  <!-- 球場 -->
+  <section class="board-wrap">
+    <!-- 2D 檢視 -->
+    <div class="board" id="board">
+      <svg class="court" viewBox="0 0 30 17" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#c99a62"/>
+            <stop offset="1" stop-color="#b07c40"/>
+          </linearGradient>
+          <pattern id="planks" width="30" height="0.9" patternUnits="userSpaceOnUse">
+            <line x1="0" y1="0.88" x2="30" y2="0.88" stroke="#7a5526" stroke-width="0.035" opacity="0.45"/>
+          </pattern>
+        </defs>
+        <rect x="0" y="0" width="30" height="17" fill="#2c2118"/>
+        <rect x="0.3" y="0.3" width="29.4" height="16.4" rx="0.2" fill="url(#wood)"/>
+        <rect x="0.3" y="0.3" width="29.4" height="16.4" rx="0.2" fill="url(#planks)"/>
+        <rect x="1" y="6.05" width="5.8" height="4.9" fill="rgba(140,32,30,0.35)"/>
+        <rect x="23.2" y="6.05" width="5.8" height="4.9" fill="rgba(140,32,30,0.35)"/>
+        <circle cx="15" cy="8.5" r="1.8" fill="rgba(140,32,30,0.28)"/>
+        <g stroke="#f7f3ea" stroke-width="0.09" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="1" width="28" height="15"/>
+          <line x1="15" y1="1" x2="15" y2="16"/>
+          <circle cx="15" cy="8.5" r="1.8"/>
+          <rect x="1" y="6.05" width="5.8" height="4.9"/>
+          <rect x="23.2" y="6.05" width="5.8" height="4.9"/>
+          <circle cx="6.8" cy="8.5" r="1.8"/>
+          <circle cx="23.2" cy="8.5" r="1.8"/>
+          <path d="M 1 1.9 L 3.99 1.9 A 6.75 6.75 0 0 1 3.99 15.1 L 1 15.1"/>
+          <path d="M 29 1.9 L 26.01 1.9 A 6.75 6.75 0 0 0 26.01 15.1 L 29 15.1"/>
+          <path d="M 2.575 7.25 A 1.25 1.25 0 0 1 2.575 9.75"/>
+          <path d="M 27.425 7.25 A 1.25 1.25 0 0 0 27.425 9.75"/>
+        </g>
+        <line x1="2.2" y1="7.6" x2="2.2" y2="9.4" stroke="#eceff4" stroke-width="0.14" stroke-linecap="round"/>
+        <line x1="27.8" y1="7.6" x2="27.8" y2="9.4" stroke="#eceff4" stroke-width="0.14" stroke-linecap="round"/>
+        <circle cx="2.575" cy="8.5" r="0.23" fill="none" stroke="#ff7043" stroke-width="0.09"/>
+        <circle cx="27.425" cy="8.5" r="0.23" fill="none" stroke="#ff7043" stroke-width="0.09"/>
+        <text x="15" y="16.72" text-anchor="middle" font-size="0.5" fill="rgba(255,255,255,0.35)"
+              font-family="sans-serif" letter-spacing="0.2">DRONE SOCCER TACTICS</text>
+      </svg>
+      <div class="pieces-layer" id="piecesLayer"></div>
+    </div>
+
+    <!-- 3D 檢視 -->
+    <div class="board3d hidden" id="board3d">
+      <div class="cam-btns">
+        <button id="camTop">俯視</button>
+        <button id="camLeft">左側</button>
+        <button id="camRight">右側</button>
+        <button id="camReset">重設鏡頭</button>
+        <button id="btnCage">隱藏網籠</button>
+      </div>
+      <div class="view3d-hint" id="view3dHint">拖動：旋轉｜滾輪：縮放｜右鍵/雙指：平移｜點擊棋子：選取</div>
+    </div>
+
+    <div class="statusbar">
+      <span id="statCount"></span>
+      <span id="statSel"></span>
+      <span id="statMsg"></span>
+    </div>
+
+    <!-- 戰術步驟時間軸 -->
+    <div class="timeline" id="timeline">
+      <div class="tl-row">
+        <div class="tl-transport">
+          <button id="btnPrevStep" title="上一步">⏮</button>
+          <button id="btnPlay" class="primary" title="播放 / 暫停（空白鍵）">▶ 播放</button>
+          <button id="btnStop" title="停止並回到步驟 1">⏹</button>
+          <button id="btnNextStep" title="下一步">⏭</button>
+          <span class="sep"></span>
+          <button id="btnRec" title="錄製手控動作：期間的拖動/高度/旋轉都會被記錄並可重放">● 錄製</button>
+          <button id="btnStepAdd" title="把目前棋子佈局擷取為新步驟">＋ 擷取步驟</button>
+        </div>
+        <div class="tl-steps" id="tlSteps"></div>
+      </div>
+      <div class="tl-edit hidden" id="tlEdit">
+        名稱 <input id="stName" type="text" maxlength="24">
+        秒數 <input id="stDur" type="number" min="0.2" max="60" step="0.1">
+        <span id="stTrackInfo"></span>
+        <button id="btnStepDup">複製步驟</button>
+        <button id="btnClearTrack" class="hidden">清除手控</button>
+        <button id="btnStepDel" class="danger">刪除步驟</button>
+      </div>
+      <div class="tl-hint" id="tlHint"></div>
+    </div>
+  </section>
+
+  <!-- 屬性面板 -->
+  <aside class="panel">
+    <h2>屬性面板</h2>
+    <div id="noSel" class="hint">尚未選取棋子。<br>在 2D 或 3D 模式點擊場上任一棋子即可在此編輯屬性；2D 模式可拖動棋子調整位置。</div>
+    <form id="propForm" class="hidden" autocomplete="off">
+      <label>名稱
+        <input type="text" id="inpName" maxlength="12">
+      </label>
+      <label>編號
+        <input type="number" id="inpNumber" min="0" max="99" step="1">
+      </label>
+      <label>隊伍
+        <select id="inpTeam">
+          <option value="red">紅隊</option>
+          <option value="blue">藍隊</option>
+          <option value="ball">足球</option>
+        </select>
+      </label>
+      <label>高度（公尺）
+        <div class="hrow">
+          <input type="range" id="inpHeightRange" min="0" max="5" step="0.1">
+          <input type="number" id="inpHeight" min="0" max="5" step="0.1">
+        </div>
+      </label>
+      <label>旋轉角度（度，0°＝朝右）
+        <div class="hrow">
+          <input type="range" id="inpRotRange" min="0" max="359" step="1">
+          <input type="number" id="inpRot" min="0" max="359" step="1">
+        </div>
+      </label>
+      <div class="meta" id="metaInfo"></div>
+      <div class="panel-actions">
+        <button type="button" id="btnDup2">複製棋子</button>
+        <button type="button" id="btnDel2" class="danger">刪除棋子</button>
+      </div>
+    </form>
+    <div class="legend">
+      <div><span class="dot red"></span>紅隊　<span class="dot blue"></span>藍隊　<span class="dot ball"></span>足球</div>
+      <div><kbd>Del</kbd> 刪除　<kbd>方向鍵</kbd> 微調（<kbd>Shift</kbd> 加速）　<kbd>Q</kbd>/<kbd>E</kbd> 旋轉</div>
+      <div><kbd>Ctrl+D</kbd> 複製　<kbd>Ctrl+S</kbd> 儲存　<kbd>Esc</kbd> 取消選取　<kbd>空白鍵</kbd> 播放/暫停</div>
+    </div>
+  </aside>
+</main>
+
+<!-- 匯入 / 匯出 Modal -->
+<div class="modal-back hidden" id="modalBack">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modalTitle"></h3>
+      <button type="button" id="modalClose">✕ 關閉</button>
+    </div>
+    <textarea id="modalText" spellcheck="false"></textarea>
+    <div id="modalMsg"></div>
+    <div class="modal-foot">
+      <div id="exportControls" class="hidden">
+        <button type="button" id="btnCopy">複製到剪貼簿</button>
+        <button type="button" id="btnDownload" class="primary">下載 .json</button>
+      </div>
+      <div id="importControls" class="hidden">
+        <label class="filebtn">選擇檔案<input type="file" id="fileInput" accept=".json,application/json" hidden></label>
+        <button type="button" id="btnDoImport" class="primary">匯入</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ============ 資料層：棋子陣列 + 戰術步驟（2D / 3D 共用）============ */
+  var STORAGE_KEY = 'droneSoccerBoard_v1';
+  var TEAMS = ['red', 'blue', 'ball'];
+  var pieces = [];          // 唯一的棋子資料來源
+  var steps = [];           // 戰術步驟：{id,name,duration,poses:{pid:{x,y,h,rot}},track}
+  var stIndex = -1;         // 目前選取的步驟索引（-1 = 未選取）
+  var selectedId = null;
+  var drag = null;
+  var mode = '2d';
+  var el2d = {};            // pieceId -> {el, hSpan, dir} 2D DOM 快取（動畫用）
+
+  function uid(){
+    return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+  function clamp(v, min, max, fb){
+    v = Number(v);
+    if (!isFinite(v)) return fb;
+    return Math.min(max, Math.max(min, v));
+  }
+  function r4(v){ return Math.round(v * 10000) / 10000; }
+  function r1(v){ return Math.round(v * 10) / 10; }
+  function normRot(v){
+    v = Number(v);
+    if (!isFinite(v)) v = 0;
+    v = Math.round(v);
+    return ((v % 360) + 360) % 360;
+  }
+  function lerp(a, b, k){ return a + (b - a) * k; }
+  function lerpAngle(a, b, k){    /* 最短弧線插值，避免 350°→10° 繞一大圈 */
+    var d = ((b - a + 540) % 360) - 180;
+    var v = a + d * k;
+    return ((v % 360) + 360) % 360;
+  }
+  function easeInOut(t){ return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2; }
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function getPiece(id){
+    for (var i = 0; i < pieces.length; i++) if (pieces[i].id === id) return pieces[i];
+    return null;
+  }
+  function makePiece(team, name, number, x, y, height, rot){
+    return { id: uid(), name: name, number: number, team: team,
+             height: height, x: x, y: y, rot: normRot(rot || 0) };
+  }
+  function defaultPieces(){
+    return [
+      makePiece('red',  '紅1', 1, 0.42, 0.50, 1.5, 0),
+      makePiece('red',  '紅2', 2, 0.33, 0.30, 1.5, 0),
+      makePiece('red',  '紅3', 3, 0.33, 0.70, 1.5, 0),
+      makePiece('red',  '紅4', 4, 0.22, 0.50, 1.5, 0),
+      makePiece('red',  '紅5', 5, 0.12, 0.50, 1.5, 0),
+      makePiece('blue', '藍1', 1, 0.58, 0.50, 1.5, 180),
+      makePiece('blue', '藍2', 2, 0.67, 0.30, 1.5, 180),
+      makePiece('blue', '藍3', 3, 0.67, 0.70, 1.5, 180),
+      makePiece('blue', '藍4', 4, 0.78, 0.50, 1.5, 180),
+      makePiece('blue', '藍5', 5, 0.88, 0.50, 1.5, 180),
+      makePiece('ball', '足球', 0, 0.50, 0.50, 2.0, 0)
+    ];
+  }
+  function nextNumber(team){
+    var max = 0;
+    pieces.forEach(function(p){ if (p.team === team && p.number > max) max = p.number; });
+    return max + 1;
+  }
+  function payload(){
+    return { app: 'drone-soccer-tactics-board', version: 2,
+             savedAt: new Date().toISOString(), pieces: pieces, steps: steps };
+  }
+  function sanitizePiece(o, i, usedIds){
+    o = (o && typeof o === 'object') ? o : {};
+    var team = TEAMS.indexOf(o.team) >= 0 ? o.team : 'red';
+    var id = (typeof o.id === 'string' && o.id && !usedIds[o.id]) ? o.id : uid();
+    usedIds[id] = true;
+    return {
+      id: id,
+      name: typeof o.name === 'string' ? o.name.slice(0, 12)
+            : (team === 'ball' ? '足球' : '棋子' + (i + 1)),
+      number: Math.round(clamp(o.number, 0, 99, 0)),
+      team: team,
+      height: r1(clamp(o.height, 0, 5, 1.5)),
+      x: clamp(o.x, 0, 1, 0.5),
+      y: clamp(o.y, 0, 1, 0.5),
+      rot: normRot(o.rot)
+    };
+  }
+  function sanitizeStep(o, i, usedIds, pieceIdSet){
+    o = (o && typeof o === 'object') ? o : {};
+    var id = (typeof o.id === 'string' && o.id && !usedIds[o.id]) ? o.id : uid();
+    usedIds[id] = true;
+    var poses = {};
+    var src = (o.poses && typeof o.poses === 'object') ? o.poses : {};
+    Object.keys(src).forEach(function(k){
+      if (!pieceIdSet[k]) return;
+      var q = src[k] || {};
+      poses[k] = { x: clamp(q.x, 0, 1, 0.5), y: clamp(q.y, 0, 1, 0.5),
+                   h: r1(clamp(q.h, 0, 5, 1.5)), rot: normRot(q.rot) };
+    });
+    var track = null, tr = o.track;
+    if (tr && typeof tr === 'object' && Array.isArray(tr.frames)){
+      var frames = [];
+      for (var j = 0; j < tr.frames.length && frames.length < 6000; j++){
+        var f = tr.frames[j];
+        if (!f || typeof f !== 'object') continue;
+        var t = Number(f.t);
+        if (!isFinite(t) || t < 0) continue;
+        var pm = {}, any = false;
+        var sp = (f.p && typeof f.p === 'object') ? f.p : {};
+        Object.keys(sp).forEach(function(k){
+          if (!pieceIdSet[k]) return;
+          var a = sp[k];
+          if (!Array.isArray(a) || a.length < 4) return;
+          pm[k] = [ clamp(a[0], 0, 1, 0.5), clamp(a[1], 0, 1, 0.5),
+                    r1(clamp(a[2], 0, 5, 1.5)), normRot(a[3]) ];
+          any = true;
+        });
+        if (any) frames.push({ t: Math.round(t), p: pm });
+      }
+      frames.sort(function(a, b){ return a.t - b.t; });
+      if (frames.length >= 2){
+        var dur = clamp(tr.dur, 200, 180000, frames[frames.length - 1].t);
+        track = { dur: Math.round(dur), frames: frames };
+      }
+    }
+    return {
+      id: id,
+      name: (typeof o.name === 'string' && o.name.trim()) ? o.name.slice(0, 24) : ('步驟 ' + (i + 1)),
+      duration: r1(clamp(o.duration, 0.2, 60, 1.5)),
+      poses: poses,
+      track: track
+    };
+  }
+  function applyData(raw){
+    var arr = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.pieces) ? raw.pieces : null);
+    if (!arr) throw new Error('格式錯誤：找不到 pieces 陣列');
+    var usedIds = {};
+    pieces = arr.map(function(o, i){ return sanitizePiece(o, i, usedIds); });
+    var idSet = {};
+    pieces.forEach(function(p){ idSet[p.id] = true; });
+    var stepArr = (raw && Array.isArray(raw.steps)) ? raw.steps : [];
+    var usedS = {};
+    steps = stepArr.map(function(o, i){ return sanitizeStep(o, i, usedS, idSet); });
+    stIndex = -1;
+    selectedId = null;
+  }
+  function snapshotPoses(){
+    var m = {};
+    pieces.forEach(function(p){
+      m[p.id] = { x: r4(p.x), y: r4(p.y), h: r1(p.height), rot: normRot(p.rot) };
+    });
+    return m;
+  }
+  function snapshotLive(){
+    var m = {};
+    pieces.forEach(function(p){
+      m[p.id] = { x: p.x, y: p.y, h: p.height, rot: p.rot };
+    });
+    return m;
+  }
+  function addPoseToSteps(p){
+    steps.forEach(function(st){
+      st.poses[p.id] = { x: r4(p.x), y: r4(p.y), h: r1(p.height), rot: normRot(p.rot) };
+    });
+  }
+  function removePoseFromSteps(id){
+    steps.forEach(function(st){ delete st.poses[id]; });
+  }
+  /* 選取步驟時，手動編輯棋子會自動寫回該步驟（播放/錄製期間停用，避免污染資料） */
+  function commitPose(){
+    if (anim.state !== 'idle' || rec.active) return;
+    var st = steps[stIndex];
+    if (!st) return;
+    st.poses = snapshotPoses();
+  }
+
+  /* ============ DOM 參照 ============ */
+  var $ = function(id){ return document.getElementById(id); };
+  var board = $('board'), layer = $('piecesLayer'), board3d = $('board3d');
+  var statCount = $('statCount'), statSel = $('statSel'), statMsg = $('statMsg');
+  var noSel = $('noSel'), propForm = $('propForm'), metaInfo = $('metaInfo');
+  var inpName = $('inpName'), inpNumber = $('inpNumber'), inpTeam = $('inpTeam');
+  var inpHeight = $('inpHeight'), inpHeightRange = $('inpHeightRange');
+  var inpRot = $('inpRot'), inpRotRange = $('inpRotRange');
+  var modalBack = $('modalBack'), modalTitle = $('modalTitle'),
+      modalText = $('modalText'), modalMsg = $('modalMsg');
+  var exportControls = $('exportControls'), importControls = $('importControls');
+  var tlSteps = $('tlSteps'), tlEdit = $('tlEdit'), tlHint = $('tlHint');
+  var stName = $('stName'), stDur = $('stDur'), stTrackInfo = $('stTrackInfo');
+  var btnPlay = $('btnPlay'), btnStop = $('btnStop'),
+      btnPrevStep = $('btnPrevStep'), btnNextStep = $('btnNextStep'),
+      btnRec = $('btnRec'), btnStepAdd = $('btnStepAdd'),
+      btnStepDup = $('btnStepDup'), btnStepDel = $('btnStepDel'),
+      btnClearTrack = $('btnClearTrack');
+
+  /* ============ 渲染（2D）============ */
+  function teamLabel(t){ return t === 'red' ? '紅隊' : t === 'blue' ? '藍隊' : '足球'; }
+
+  function buildEl(p){
+    var el = document.createElement('div');
+    el.className = 'piece team-' + p.team + (p.id === selectedId ? ' selected' : '');
+    el.dataset.id = p.id;
+    el.style.left = (p.x * 100) + '%';
+    el.style.top  = (p.y * 100) + '%';
+    var discText = (p.team === 'ball') ? '' : esc(String(p.number));
+    var dirHtml = (p.team === 'ball') ? ''
+      : '<div class="dir" style="transform:rotate(' + p.rot + 'deg)"><i></i></div>';
+    el.innerHTML =
+      '<div class="disc">' + discText + '</div>' + dirHtml +
+      '<div class="tag">' + esc(p.name) +
+      '<span class="h">' + p.height.toFixed(1) + 'm</span></div>';
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('pointermove', onPointerMove);
+    el.addEventListener('pointerup', onPointerUp);
+    el.addEventListener('pointercancel', onPointerUp);
+    el2d[p.id] = { el: el, hSpan: el.querySelector('.tag .h'), dir: el.querySelector('.dir') };
+    return el;
+  }
+  function positionEl(el, p){
+    el.style.left = (p.x * 100) + '%';
+    el.style.top  = (p.y * 100) + '%';
+  }
+  /* 輕量視覺更新：動畫每幀使用，不重建 DOM */
+  function applyPieceVisual(p){
+    var c = el2d[p.id];
+    if (!c) return;
+    c.el.style.left = (p.x * 100) + '%';
+    c.el.style.top  = (p.y * 100) + '%';
+    var ht = p.height.toFixed(1) + 'm';
+    if (c.hSpan.textContent !== ht) c.hSpan.textContent = ht;
+    if (c.dir) c.dir.style.transform = 'rotate(' + p.rot + 'deg)';
+  }
+  function replaceEl(p){
+    var old = layer.querySelector('.piece[data-id="' + p.id + '"]');
+    if (old) old.replaceWith(buildEl(p));
+  }
+  function renderAll(){
+    drag = null;
+    layer.innerHTML = '';
+    el2d = {};
+    pieces.forEach(function(p){ layer.appendChild(buildEl(p)); });
+    refreshPanel();
+    refreshStatus();
+  }
+
+  /* ============ 狀態列 ============ */
+  var msgTimer = null;
+  function flash(msg, isErr){
+    statMsg.textContent = msg;
+    statMsg.className = isErr ? 'err' : 'ok';
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(function(){ statMsg.textContent = ''; statMsg.className = ''; }, 3000);
+  }
+  function courtCoord(p){
+    var mx = p.x * 30 - 1, my = p.y * 17 - 1;
+    return 'x ' + mx.toFixed(1) + 'm, y ' + my.toFixed(1) + 'm';
+  }
+  function refreshStatus(){
+    var r = 0, b = 0, k = 0;
+    pieces.forEach(function(p){
+      if (p.team === 'red') r++; else if (p.team === 'blue') b++; else k++;
+    });
+    statCount.innerHTML = '棋子 <b>' + pieces.length + '</b>（紅 ' + r + '｜藍 ' + b +
+                          '｜球 ' + k + '）｜步驟 <b>' + steps.length + '</b>';
+    var p = getPiece(selectedId);
+    statSel.innerHTML = p
+      ? '選取：<b>' + esc(p.name) + '</b>｜' + courtCoord(p) + '｜高度 ' + p.height.toFixed(1) +
+        'm｜角度 ' + Math.round(p.rot) + '°'
+      : '未選取';
+    sync3D();
+  }
+
+  /* ============ 屬性面板 ============ */
+  function refreshPanel(){
+    var p = getPiece(selectedId);
+    noSel.classList.toggle('hidden', !!p);
+    propForm.classList.toggle('hidden', !p);
+    if (!p) return;
+    inpName.value = p.name;
+    inpNumber.value = p.number;
+    inpTeam.value = p.team;
+    inpHeight.value = r1(p.height);
+    inpHeightRange.value = r1(p.height);
+    inpRot.value = Math.round(p.rot);
+    inpRotRange.value = Math.round(p.rot);
+    refreshMeta(p);
+  }
+  function refreshMeta(p){
+    metaInfo.innerHTML = 'ID：' + esc(p.id) + '<br>隊伍：' + teamLabel(p.team) +
+                         '<br>場地座標：' + courtCoord(p);
+  }
+  function editSelected(fn){
+    var p = getPiece(selectedId);
+    if (!p) return;
+    fn(p);
+    replaceEl(p);
+    refreshMeta(p);
+    refreshStatus();
+  }
+  propForm.addEventListener('submit', function(e){ e.preventDefault(); });
+  inpName.addEventListener('input', function(){
+    editSelected(function(p){ p.name = inpName.value; });
+  });
+  inpNumber.addEventListener('input', function(){
+    if (inpNumber.value === '') return;
+    editSelected(function(p){ p.number = Math.round(clamp(inpNumber.value, 0, 99, 0)); });
+  });
+  inpNumber.addEventListener('change', function(){
+    var p = getPiece(selectedId); if (p) inpNumber.value = p.number;
+  });
+  inpTeam.addEventListener('change', function(){
+    editSelected(function(p){ p.team = inpTeam.value; });
+  });
+  /* input 時不回寫「正在輸入的欄位」，避免小數點被吃掉 */
+  function setHeight(v, src){
+    var h = r1(clamp(v, 0, 5, 1.5));
+    if (src !== 'num')   inpHeight.value = h;
+    if (src !== 'range') inpHeightRange.value = h;
+    editSelected(function(p){ p.height = h; });
+    commitPose();
+  }
+  inpHeight.addEventListener('input', function(){
+    if (inpHeight.value === '') return;
+    setHeight(inpHeight.value, 'num');
+  });
+  inpHeight.addEventListener('change', function(){
+    var p = getPiece(selectedId);
+    if (p){ inpHeight.value = r1(p.height); inpHeightRange.value = r1(p.height); }
+  });
+  inpHeightRange.addEventListener('input', function(){ setHeight(inpHeightRange.value, 'range'); });
+
+  function setRot(v, src){
+    var r = normRot(v);
+    if (src !== 'num')   inpRot.value = r;
+    if (src !== 'range') inpRotRange.value = r;
+    editSelected(function(p){ p.rot = r; });
+    commitPose();
+  }
+  inpRot.addEventListener('input', function(){
+    if (inpRot.value === '') return;
+    setRot(inpRot.value, 'num');
+  });
+  inpRot.addEventListener('change', function(){
+    var p = getPiece(selectedId);
+    if (p){ inpRot.value = Math.round(p.rot); inpRotRange.value = Math.round(p.rot); }
+  });
+  inpRotRange.addEventListener('input', function(){ setRot(inpRotRange.value, 'range'); });
+
+  /* ============ 選取 ============ */
+  function selectPiece(id){
+    if (selectedId === id) { refreshPanel(); refreshStatus(); return; }
+    selectedId = id;
+    var els = layer.querySelectorAll('.piece');
+    for (var i = 0; i < els.length; i++){
+      els[i].classList.toggle('selected', els[i].dataset.id === id);
+    }
+    refreshPanel();
+    refreshStatus();
+  }
+  function deselect(){ selectPiece(null); }
+  board.addEventListener('pointerdown', function(e){
+    if (e.target.closest && e.target.closest('.piece')) return;
+    deselect();
+  });
+
+  /* ============ 拖動（2D，Pointer Events）============ */
+  function onPointerDown(e){
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    var el = e.currentTarget;
+    var p = getPiece(el.dataset.id);
+    if (!p) return;
+    selectPiece(p.id);
+    if (anim.state === 'playing'){ e.preventDefault(); return; }  // 播放中僅可選取
+    var rect = board.getBoundingClientRect();
+    drag = {
+      id: p.id, el: el, pointerId: e.pointerId,
+      dx: p.x * rect.width  - (e.clientX - rect.left),
+      dy: p.y * rect.height - (e.clientY - rect.top)
+    };
+    try { el.setPointerCapture(e.pointerId); } catch(err){}
+    el.classList.add('dragging');
+    e.preventDefault();
+  }
+  function onPointerMove(e){
+    if (!drag || drag.el !== e.currentTarget || drag.pointerId !== e.pointerId) return;
+    var rect = board.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return;
+    var margin = 18;
+    var px = clamp(e.clientX - rect.left + drag.dx, margin, rect.width  - margin, rect.width / 2);
+    var py = clamp(e.clientY - rect.top  + drag.dy, margin, rect.height - margin, rect.height / 2);
+    var p = getPiece(drag.id);
+    if (!p) return;
+    p.x = px / rect.width;
+    p.y = py / rect.height;
+    positionEl(drag.el, p);
+    refreshMeta(p);
+    refreshStatus();
+    commitPose();   // 選取步驟時自動寫回；錄製時由取樣器記錄
+    e.preventDefault();
+  }
+  function onPointerUp(e){
+    if (!drag || drag.el !== e.currentTarget) return;
+    drag.el.classList.remove('dragging');
+    drag = null;
+  }
+  layer.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+  /* ============ 新增 / 複製 / 刪除 ============ */
+  function jitter(){ return (Math.random() - 0.5) * 0.06; }
+  function addPiece(team){
+    var p;
+    if (team === 'ball'){
+      var balls = pieces.filter(function(q){ return q.team === 'ball'; }).length;
+      p = makePiece('ball', balls === 0 ? '足球' : '足球' + (balls + 1), 0,
+                    0.5 + jitter(), 0.5 + jitter(), 2.0, 0);
+    } else {
+      var n = nextNumber(team);
+      var baseX = team === 'red' ? 0.45 : 0.55;
+      p = makePiece(team, (team === 'red' ? '紅' : '藍') + n, n,
+                    baseX + jitter(), 0.5 + jitter(), 1.5, team === 'red' ? 0 : 180);
+    }
+    pieces.push(p);
+    addPoseToSteps(p);   // 讓既有步驟也認得這顆棋子（先靜止於出生位置）
+    layer.appendChild(buildEl(p));
+    selectPiece(p.id);
+    flash('已新增：' + p.name);
+  }
+  function duplicateSelected(){
+    var p = getPiece(selectedId);
+    if (!p) { flash('請先選取棋子再複製', true); return; }
+    var copy = sanitizePiece(p, pieces.length, {});
+    copy.id = uid();
+    copy.x = clamp(p.x + 0.045, 0.02, 0.98, 0.5);
+    copy.y = clamp(p.y + 0.055, 0.02, 0.98, 0.5);
+    if (copy.team !== 'ball'){
+      copy.number = nextNumber(copy.team);
+      copy.name = ((copy.team === 'red') ? '紅' : '藍') + copy.number;
+    }
+    pieces.push(copy);
+    addPoseToSteps(copy);
+    layer.appendChild(buildEl(copy));
+    selectPiece(copy.id);
+    flash('已複製為：' + copy.name);
+  }
+  function deleteSelected(){
+    var p = getPiece(selectedId);
+    if (!p) { flash('請先選取棋子再刪除', true); return; }
+    pieces = pieces.filter(function(q){ return q.id !== p.id; });
+    removePoseFromSteps(p.id);
+    selectedId = null;
+    renderAll();
+    flash('已刪除：' + p.name);
+  }
+  $('btnAddRed').addEventListener('click', function(){ addPiece('red'); });
+  $('btnAddBlue').addEventListener('click', function(){ addPiece('blue'); });
+  $('btnAddBall').addEventListener('click', function(){ addPiece('ball'); });
+  $('btnDup').addEventListener('click', duplicateSelected);
+  $('btnDel').addEventListener('click', deleteSelected);
+  $('btnDup2').addEventListener('click', duplicateSelected);
+  $('btnDel2').addEventListener('click', deleteSelected);
+
+  /* ============ localStorage 儲存 / 載入 ============ */
+  function saveLocal(){
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload()));
+      flash('已儲存（' + pieces.length + ' 棋子、' + steps.length + ' 步驟）');
+    } catch(err){
+      flash('儲存失敗：此環境可能停用 localStorage 或空間不足', true);
+    }
+  }
+  function loadLocal(){
+    stopRec(true);
+    cancelPlayback();
+    try {
+      var s = localStorage.getItem(STORAGE_KEY);
+      if (!s) { flash('找不到存檔，請先按「儲存」', true); return; }
+      applyData(JSON.parse(s));
+      renderAll();
+      renderTimeline();
+      flash('已載入（' + pieces.length + ' 棋子、' + steps.length + ' 步驟）');
+    } catch(err){
+      flash('載入失敗：' + err.message, true);
+    }
+  }
+  $('btnSave').addEventListener('click', saveLocal);
+  $('btnLoad').addEventListener('click', loadLocal);
+
+  /* ============ 重設（兩段式確認）============ */
+  var btnReset = $('btnReset'), resetArmed = false, resetTimer = null;
+  function disarmReset(){
+    resetArmed = false;
+    btnReset.textContent = '重設';
+    btnReset.classList.remove('danger');
+    clearTimeout(resetTimer);
+  }
+  btnReset.addEventListener('click', function(){
+    if (!resetArmed){
+      resetArmed = true;
+      btnReset.textContent = '確認重設？';
+      btnReset.classList.add('danger');
+      resetTimer = setTimeout(disarmReset, 3000);
+    } else {
+      disarmReset();
+      stopRec(true);
+      cancelPlayback();
+      pieces = defaultPieces();
+      steps = [];
+      stIndex = -1;
+      selectedId = null;
+      renderAll();
+      renderTimeline();
+      flash('已重設為預設佈局（步驟已清空）');
+    }
+  });
+
+  /* ============ 匯入 / 匯出 JSON（Modal）============ */
+  var modalMode = null;
+  function openModal(m){
+    modalMode = m;
+    modalMsg.textContent = '';
+    modalMsg.className = '';
+    exportControls.classList.toggle('hidden', m !== 'export');
+    importControls.classList.toggle('hidden', m !== 'import');
+    if (m === 'export'){
+      modalTitle.textContent = '匯出 JSON（含步驟與手控錄製）';
+      modalText.value = JSON.stringify(payload(), null, 2);
+      modalText.readOnly = true;
+    } else {
+      modalTitle.textContent = '匯入 JSON';
+      modalText.value = '';
+      modalText.readOnly = false;
+      modalText.placeholder = '在此貼上 JSON，或按左下角「選擇檔案」…';
+    }
+    modalBack.classList.remove('hidden');
+    modalText.focus();
+  }
+  function closeModal(){ modalBack.classList.add('hidden'); modalMode = null; }
+  function setModalMsg(msg, isErr){
+    modalMsg.textContent = msg;
+    modalMsg.className = isErr ? 'err' : 'ok';
+  }
+  $('btnExport').addEventListener('click', function(){ openModal('export'); });
+  $('btnImport').addEventListener('click', function(){ openModal('import'); });
+  $('modalClose').addEventListener('click', closeModal);
+  modalBack.addEventListener('pointerdown', function(e){
+    if (e.target === modalBack) closeModal();
+  });
+
+  $('btnCopy').addEventListener('click', function(){
+    var text = modalText.value;
+    function fallback(){
+      modalText.readOnly = false;
+      modalText.select();
+      try { document.execCommand('copy'); setModalMsg('已複製到剪貼簿'); }
+      catch(e){ setModalMsg('複製失敗，請手動全選複製', true); }
+      modalText.readOnly = true;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text)
+        .then(function(){ setModalMsg('已複製到剪貼簿'); })
+        .catch(fallback);
+    } else fallback();
+  });
+  $('btnDownload').addEventListener('click', function(){
+    try {
+      var blob = new Blob([modalText.value], { type: 'application/json' });
+      var a = document.createElement('a');
+      var d = new Date();
+      var pad = function(n){ return String(n).padStart(2, '0'); };
+      a.href = URL.createObjectURL(blob);
+      a.download = 'drone-soccer-tactics-' + d.getFullYear() + pad(d.getMonth()+1) +
+                   pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes()) + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+      setModalMsg('已觸發下載；若被瀏覽器攔截，請改用「複製到剪貼簿」');
+    } catch(err){
+      setModalMsg('下載失敗，請改用複製', true);
+    }
+  });
+  $('fileInput').addEventListener('change', function(){
+    var f = this.files && this.files[0];
+    this.value = '';
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      modalText.value = String(reader.result || '');
+      setModalMsg('已讀取檔案「' + f.name + '」，請按「匯入」套用');
+    };
+    reader.onerror = function(){ setModalMsg('讀取檔案失敗', true); };
+    reader.readAsText(f);
+  });
+  $('btnDoImport').addEventListener('click', function(){
+    try {
+      var data = JSON.parse(modalText.value);
+      stopRec(true);
+      cancelPlayback();
+      applyData(data);
+      renderAll();
+      renderTimeline();
+      closeModal();
+      flash('匯入成功：' + pieces.length + ' 棋子、' + steps.length + ' 步驟');
+    } catch(err){
+      setModalMsg('匯入失敗：' + err.message, true);
+    }
+  });
+
+  /* ============ 鍵盤快捷鍵 ============ */
+  document.addEventListener('keydown', function(e){
+    var tag = document.activeElement ? document.activeElement.tagName : '';
+    var typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+    if (e.key === 'Escape'){
+      if (modalMode) closeModal(); else deselect();
+      return;
+    }
+    if (typing) return;
+    if (e.key === ' ' || e.code === 'Space'){
+      if (tag === 'BUTTON') return;   // 避免與按鈕的空白鍵觸發重複
+      e.preventDefault();
+      playToggle();
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId){
+      e.preventDefault();
+      deleteSelected();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D') && selectedId){
+      e.preventDefault();
+      duplicateSelected();
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')){
+      e.preventDefault();
+      saveLocal();
+    } else if ((e.key === 'q' || e.key === 'Q' || e.key === 'e' || e.key === 'E') && selectedId){
+      var pq = getPiece(selectedId);
+      if (!pq) return;
+      pq.rot = normRot(pq.rot + ((e.key === 'q' || e.key === 'Q') ? -15 : 15));
+      applyPieceVisual(pq);
+      inpRot.value = pq.rot; inpRotRange.value = pq.rot;
+      refreshStatus();
+      commitPose();
+    } else if (e.key.indexOf('Arrow') === 0 && selectedId){
+      e.preventDefault();
+      var p = getPiece(selectedId);
+      if (!p) return;
+      var step = e.shiftKey ? 0.03 : 0.008;
+      if (e.key === 'ArrowLeft')  p.x -= step;
+      if (e.key === 'ArrowRight') p.x += step;
+      if (e.key === 'ArrowUp')    p.y -= step;
+      if (e.key === 'ArrowDown')  p.y += step;
+      p.x = clamp(p.x, 0.02, 0.98, 0.5);
+      p.y = clamp(p.y, 0.03, 0.97, 0.5);
+      applyPieceVisual(p);
+      refreshMeta(p);
+      refreshStatus();
+      commitPose();
+    }
+  });
+
+  /* ============================================================
+     ==============  戰術步驟時間軸 + 動畫播放  ==================
+     ============================================================ */
+  var anim = { state: 'idle',   // 'idle' | 'playing' | 'paused'
+               toIdx: -1, dur: 1, segStart: 0, pausedAt: 0,
+               from: null, to: null, comp: null, trackDur: 0,
+               ptr: null, progEl: null, raf: null };
+  var rec = { active: false, t0: 0, frames: null, last: null,
+              raf: null, lastSample: 0, lastBtn: 0 };
+  var trackCache = (typeof WeakMap !== 'undefined') ? new WeakMap() : null;
+
+  function snapshotArr(){
+    var m = {};
+    pieces.forEach(function(p){
+      m[p.id] = [ r4(p.x), r4(p.y), r1(p.height), normRot(p.rot) ];
+    });
+    return m;
+  }
+  function setPieceLive(p, x, y, h, rot){
+    p.x = x; p.y = y; p.height = h; p.rot = rot;
+    applyPieceVisual(p);
+  }
+  function applyPoses(m){
+    pieces.forEach(function(p){
+      var q = m[p.id];
+      if (q) setPieceLive(p, q.x, q.y, q.h, q.rot);
+    });
+  }
+  function compileTrack(tr){
+    if (trackCache){ var c = trackCache.get(tr); if (c) return c; }
+    var byId = {};
+    tr.frames.forEach(function(f){
+      Object.keys(f.p).forEach(function(id){
+        (byId[id] || (byId[id] = [])).push({ t: f.t, v: f.p[id] });
+      });
+    });
+    var comp = { dur: tr.dur, byId: byId };
+    if (trackCache) trackCache.set(tr, comp);
+    return comp;
+  }
+  function applyTrackTime(comp, tms, ptr){
+    Object.keys(comp.byId).forEach(function(id){
+      var p = getPiece(id);
+      if (!p) return;
+      var kfs = comp.byId[id];
+      var i = ptr[id] || 0;
+      while (i < kfs.length - 1 && kfs[i + 1].t <= tms) i++;
+      ptr[id] = i;
+      var a = kfs[i], b = (i + 1 < kfs.length) ? kfs[i + 1] : null;
+      if (!b || tms <= a.t){
+        setPieceLive(p, a.v[0], a.v[1], a.v[2], a.v[3]);
+      } else {
+        var k = (tms - a.t) / (b.t - a.t);
+        if (!isFinite(k)) k = 0;
+        k = Math.max(0, Math.min(1, k));
+        setPieceLive(p,
+          lerp(a.v[0], b.v[0], k), lerp(a.v[1], b.v[1], k),
+          lerp(a.v[2], b.v[2], k), lerpAngle(a.v[3], b.v[3], k));
+      }
+    });
+  }
+
+  /* ---- 時間軸 UI ---- */
+  function renderTimeline(){
+    tlSteps.innerHTML = '';
+    if (steps.length === 0) tlSteps.innerHTML =
+  '<span style="align-self:center;font-size:11.5px;color:var(--muted);white-space:nowrap;">按「＋ 擷取步驟」建立第 1 步</span>';
+    steps.forEach(function(st, i){
+      var d = document.createElement('div');
+      d.className = 'chip' + (i === stIndex ? ' sel' : '');
+      d.dataset.i = i;
+      d.innerHTML =
+        '<span class="ord">' + (i + 1) + (st.track ? ' <span class="trk">●手控</span>' : '') + '</span>' +
+        '<span class="nm">' + esc(st.name) + '</span>' +
+        '<span class="du">' + st.duration.toFixed(1) + ' 秒</span>' +
+        '<div class="prog"></div>';
+      tlSteps.appendChild(d);
+    });
+    tlHint.textContent = steps.length === 0
+      ? '尚無步驟：先排好棋子，按「＋ 擷取步驟」建立第 1 步；之後每改一次陣型再擷取一步，即可播放動畫。也可按「● 錄製」直接錄下手控動作。'
+      : (stIndex >= 0
+          ? '已選步驟 ' + (stIndex + 1) + '：現在拖動棋子/調高度/旋轉會自動存入此步驟。播放會由此步接續到最後。'
+          : '點擊步驟可套用該步位置；選取後拖動棋子會自動寫入該步驟。');
+    var st = steps[stIndex];
+    tlEdit.classList.toggle('hidden', !st);
+    if (st){
+      stName.value = st.name;
+      stDur.value = st.duration;
+      stTrackInfo.textContent = st.track
+        ? '（手控錄製 ' + (st.track.dur / 1000).toFixed(1) + 's，改秒數可加速/放慢重放）'
+        : '（直線平滑移動）';
+      btnClearTrack.classList.toggle('hidden', !st.track);
+    }
+    var playing = anim.state !== 'idle';
+    btnPlay.textContent = anim.state === 'playing' ? '⏸ 暫停' : '▶ 播放';
+    btnPlay.disabled = steps.length === 0 || rec.active;
+    btnStop.disabled = steps.length === 0 || rec.active;
+    btnPrevStep.disabled = steps.length === 0 || rec.active;
+    btnNextStep.disabled = steps.length === 0 || rec.active;
+    btnStepAdd.disabled = playing || rec.active;
+    btnStepDup.disabled = playing || rec.active;
+    btnStepDel.disabled = playing || rec.active;
+    btnClearTrack.disabled = playing || rec.active;
+    stName.disabled = playing;
+    stDur.disabled = playing;
+    btnRec.disabled = playing;
+    tlSteps.classList.toggle('disabled', rec.active);
+    scrollChipIntoView();
+  }
+  function scrollChipIntoView(){
+    var chip = tlSteps.querySelector('.chip.sel');
+    if (!chip) return;
+    var L = chip.offsetLeft, R = L + chip.offsetWidth;
+    if (L < tlSteps.scrollLeft + 6) tlSteps.scrollLeft = Math.max(0, L - 8);
+    else if (R > tlSteps.scrollLeft + tlSteps.clientWidth - 6)
+      tlSteps.scrollLeft = R - tlSteps.clientWidth + 8;
+  }
+  function clearProg(){
+    var els = tlSteps.querySelectorAll('.prog');
+    for (var i = 0; i < els.length; i++) els[i].style.width = '0%';
+  }
+
+  /* ---- 步驟操作 ---- */
+  function applyStep(i){
+    if (i < 0 || i >= steps.length) return;
+    cancelPlayback();
+    stIndex = i;
+    var st = steps[i];
+    pieces.forEach(function(p){
+      var q = st.poses[p.id];
+      if (q){ p.x = q.x; p.y = q.y; p.height = q.h; p.rot = q.rot; }
+    });
+    renderAll();
+    renderTimeline();
+  }
+  function addStepFromCurrent(){
+    if (rec.active){ flash('錄製中無法新增步驟', true); return; }
+    cancelPlayback();
+    var st = { id: uid(), name: '步驟 ' + (steps.length + 1), duration: 1.5,
+               poses: snapshotPoses(), track: null };
+    var at = (stIndex >= 0) ? stIndex + 1 : steps.length;
+    steps.splice(at, 0, st);
+    stIndex = at;
+    renderTimeline();
+    refreshStatus();
+    flash('已擷取為「' + st.name + '」');
+  }
+  function dupStep(){
+    var st = steps[stIndex];
+    if (!st) return;
+    cancelPlayback();
+    var copy = JSON.parse(JSON.stringify(st));
+    copy.id = uid();
+    copy.name = (st.name + ' 複製').slice(0, 24);
+    steps.splice(stIndex + 1, 0, copy);
+    stIndex = stIndex + 1;
+    renderTimeline();
+    refreshStatus();
+    flash('已複製步驟：' + copy.name);
+  }
+  function delStep(){
+    var st = steps[stIndex];
+    if (!st) return;
+    cancelPlayback();
+    steps.splice(stIndex, 1);
+    stIndex = steps.length === 0 ? -1 : Math.min(stIndex, steps.length - 1);
+    renderTimeline();
+    refreshStatus();
+    flash('已刪除步驟：' + st.name);
+  }
+  function clearTrack(){
+    var st = steps[stIndex];
+    if (!st || !st.track) return;
+    st.track = null;
+    renderTimeline();
+    flash('已清除手控錄製，此步改為直線移動');
+  }
+  tlSteps.addEventListener('click', function(e){
+    var chip = e.target.closest ? e.target.closest('.chip') : null;
+    if (!chip || rec.active) return;
+    applyStep(parseInt(chip.dataset.i, 10));
+  });
+  stName.addEventListener('input', function(){
+    var st = steps[stIndex];
+    if (!st) return;
+    st.name = stName.value.slice(0, 24);
+    var nm = tlSteps.querySelector('.chip[data-i="' + stIndex + '"] .nm');
+    if (nm) nm.textContent = st.name || ('步驟 ' + (stIndex + 1));
+  });
+  stName.addEventListener('change', function(){
+    var st = steps[stIndex];
+    if (!st) return;
+    if (!st.name.trim()){ st.name = '步驟 ' + (stIndex + 1); renderTimeline(); }
+  });
+  stDur.addEventListener('change', function(){
+    var st = steps[stIndex];
+    if (!st) return;
+    st.duration = r1(clamp(stDur.value, 0.2, 60, 1.5));
+    renderTimeline();
+  });
+  btnStepAdd.addEventListener('click', addStepFromCurrent);
+  btnStepDup.addEventListener('click', dupStep);
+  btnStepDel.addEventListener('click', delStep);
+  btnClearTrack.addEventListener('click', clearTrack);
+
+  /* ---- 播放引擎 ---- */
+  function cancelPlayback(){
+    if (anim.state === 'idle') return;
+    anim.state = 'idle';
+    if (anim.raf){ cancelAnimationFrame(anim.raf); anim.raf = null; }
+    clearProg();
+    btnPlay.textContent = '▶ 播放';
+    renderTimeline();
+    refreshPanel();
+    refreshStatus();
+  }
+  function startSegment(idx){
+    stIndex = idx;
+    var st = steps[idx];
+    anim.toIdx = idx;
+    anim.dur = Math.max(150, st.duration * 1000);
+    anim.from = snapshotLive();
+    anim.to = st.poses;
+    anim.comp = st.track ? compileTrack(st.track) : null;
+    anim.trackDur = st.track ? st.track.dur : 0;
+    anim.ptr = {};
+    anim.segStart = performance.now();
+    renderTimeline();
+    anim.progEl = tlSteps.querySelector('.chip[data-i="' + idx + '"] .prog');
+  }
+  function tick(now){
+    if (anim.state === 'idle'){ anim.raf = null; return; }
+    anim.raf = requestAnimationFrame(tick);
+    if (anim.state !== 'playing') return;
+    var t = (now - anim.segStart) / anim.dur;
+    if (t >= 1){
+      applyPoses(anim.to);
+      sync3D();
+      if (anim.progEl) anim.progEl.style.width = '100%';
+      if (anim.toIdx >= steps.length - 1){
+        anim.state = 'idle';
+        if (anim.raf){ cancelAnimationFrame(anim.raf); anim.raf = null; }
+        clearProg();
+        renderTimeline();
+        refreshPanel();
+        refreshStatus();
+        flash('播放完成');
+        return;
+      }
+      startSegment(anim.toIdx + 1);
+      return;
+    }
+    var k = easeInOut(Math.max(0, t));
+    if (anim.comp){
+      applyTrackTime(anim.comp, t * anim.trackDur, anim.ptr);
+      pieces.forEach(function(p){          // 錄製中沒動到的棋子仍做直線過渡
+        if (anim.comp.byId[p.id]) return;
+        var f = anim.from[p.id], q = anim.to[p.id];
+        if (f && q) setPieceLive(p, lerp(f.x, q.x, k), lerp(f.y, q.y, k),
+                                 lerp(f.h, q.h, k), lerpAngle(f.rot, q.rot, k));
+      });
+    } else {
+      pieces.forEach(function(p){
+        var f = anim.from[p.id], q = anim.to[p.id];
+        if (f && q) setPieceLive(p, lerp(f.x, q.x, k), lerp(f.y, q.y, k),
+                                 lerp(f.h, q.h, k), lerpAngle(f.rot, q.rot, k));
+      });
+    }
+    sync3D();
+    if (anim.progEl) anim.progEl.style.width = (t * 100).toFixed(1) + '%';
+  }
+  function playToggle(){
+    if (rec.active){ flash('錄製中，請先按「■ 完成」', true); return; }
+    if (steps.length === 0){ flash('尚無步驟，請先按「＋ 擷取步驟」', true); return; }
+    if (anim.state === 'playing'){
+      anim.state = 'paused';
+      anim.pausedAt = performance.now();
+      btnPlay.textContent = '▶ 播放';
+      return;
+    }
+    if (anim.state === 'paused'){
+      anim.segStart += performance.now() - anim.pausedAt;
+      anim.state = 'playing';
+      btnPlay.textContent = '⏸ 暫停';
+      return;
+    }
+    var enter = (stIndex >= 0 && stIndex < steps.length - 1) ? stIndex + 1 : 0;
+    anim.state = 'playing';
+    startSegment(enter);
+    anim.raf = requestAnimationFrame(tick);
+  }
+  function stopPlayback(){
+    if (rec.active){ flash('錄製中，請先按「■ 完成」', true); return; }
+    cancelPlayback();
+    if (steps.length) applyStep(0);
+  }
+  function stepJump(d){
+    if (rec.active) return;
+    if (!steps.length){ flash('尚無步驟', true); return; }
+    cancelPlayback();
+    var i = (stIndex < 0) ? (d > 0 ? 0 : steps.length - 1) : stIndex + d;
+    i = Math.max(0, Math.min(steps.length - 1, i));
+    applyStep(i);
+  }
+  btnPlay.addEventListener('click', playToggle);
+  btnStop.addEventListener('click', stopPlayback);
+  btnPrevStep.addEventListener('click', function(){ stepJump(-1); });
+  btnNextStep.addEventListener('click', function(){ stepJump(1); });
+
+  /* ---- 手控錄製：記錄拖動/高度/旋轉的即時軌跡，之後可重放 ---- */
+  function startRec(){
+    if (anim.state !== 'idle'){ flash('請先停止播放再錄製', true); return; }
+    cancelPlayback();
+    rec.active = true;
+    rec.t0 = performance.now();
+    rec.lastSample = 0;
+    rec.lastBtn = 0;
+    var snap = snapshotArr();
+    rec.last = snap;
+    rec.frames = [{ t: 0, p: JSON.parse(JSON.stringify(snap)) }];
+    btnRec.textContent = '■ 完成 0s';
+    btnRec.classList.add('rec-on');
+    renderTimeline();
+    rec.raf = requestAnimationFrame(recTick);
+    flash('錄製中：拖動棋子、調高度/旋轉都會被記錄，完成後按「■ 完成」');
+  }
+  function recTick(now){
+    if (!rec.active) return;
+    rec.raf = requestAnimationFrame(recTick);
+    var el = now - rec.t0;
+    if (now - rec.lastBtn > 250){
+      rec.lastBtn = now;
+      btnRec.textContent = '■ 完成 ' + (el / 1000).toFixed(0) + 's';
+    }
+    if (el - rec.lastSample < 66) return;   // 約 15fps 取樣
+    rec.lastSample = el;
+    var diff = {}, any = false;
+    pieces.forEach(function(p){
+      var a = rec.last[p.id];
+      var cur = [ r4(p.x), r4(p.y), r1(p.height), normRot(p.rot) ];
+      if (!a || a[0] !== cur[0] || a[1] !== cur[1] || a[2] !== cur[2] || a[3] !== cur[3]){
+        diff[p.id] = cur;
+        rec.last[p.id] = cur;
+        any = true;
+      }
+    });
+    if (any) rec.frames.push({ t: Math.round(el), p: diff });
+    if (el > 150000 || rec.frames.length > 4500){
+      stopRec(false);
+      flash('錄製已達上限，已自動完成', true);
+    }
+  }
+  function stopRec(discard){
+    if (!rec.active) return;
+    rec.active = false;
+    if (rec.raf){ cancelAnimationFrame(rec.raf); rec.raf = null; }
+    btnRec.textContent = '● 錄製';
+    btnRec.classList.remove('rec-on');
+    var el = performance.now() - rec.t0;
+    if (!discard && el >= 300){
+      rec.frames.push({ t: Math.round(el), p: snapshotArr() });
+      var n = 1;
+      steps.forEach(function(s){ if (s.track) n++; });
+      var st = { id: uid(), name: '手控 ' + n,
+                 duration: r1(Math.max(0.3, el / 1000)),
+                 poses: snapshotPoses(),
+                 track: { dur: Math.round(el), frames: rec.frames } };
+      var at = (stIndex >= 0) ? stIndex + 1 : steps.length;
+      steps.splice(at, 0, st);
+      stIndex = at;
+      flash('已錄製為「' + st.name + '」（' + st.duration.toFixed(1) + ' 秒）');
+    } else if (!discard){
+      flash('錄製太短，已取消', true);
+    }
+    rec.frames = null;
+    rec.last = null;
+    renderTimeline();
+    refreshStatus();
+  }
+  btnRec.addEventListener('click', function(){
+    if (rec.active) stopRec(false); else startRec();
+  });
+
+  /* ============ 收合工具列（簡報模式）============ */
+  var btnCollapse = $('btnCollapse'), btnExpand = $('btnExpand');
+  function setCollapsed(v){
+    document.body.classList.toggle('collapsed', v);
+    btnExpand.classList.toggle('hidden', !v);
+    resize3D();
+  }
+  btnCollapse.addEventListener('click', function(){ setCollapsed(true); });
+  btnExpand.addEventListener('click', function(){ setCollapsed(false); });
+
+  /* ============================================================
+     ================  3D 模式（Three.js）  =====================
+     ============================================================ */
+  var T = {
+    inited: false, failed: false,
+    scene: null, camera: null, renderer: null, controls: null,
+    piecesGroup: null, cage: null,
+    map: {}
+  };
+  var COURT_W = 30, COURT_D = 17;
+  var CAGE_W = 28, CAGE_D = 15, CAGE_H = 5;
+  var TEAM_HEX = { red: 0xd63b30, blue: 0x2196f3, ball: 0xfb8c00 };
+  var DEG = Math.PI / 180;
+
+  function toWorld(p){
+    return { x: p.x * COURT_W - COURT_W / 2, z: p.y * COURT_D - COURT_D / 2 };
+  }
+  function disposeObj(root){
+    root.traverse(function(o){
+      if (o.geometry) o.geometry.dispose();
+      if (o.material){
+        var mats = Array.isArray(o.material) ? o.material : [o.material];
+        mats.forEach(function(m){
+          if (m.map) m.map.dispose();
+          m.dispose();
+        });
+      }
+    });
+  }
+  function makeCourtTexture(){
+    var s = 40;
+    var cv = document.createElement('canvas');
+    cv.width = COURT_W * s; cv.height = COURT_D * s;
+    var c = cv.getContext('2d');
+    c.fillStyle = '#2c2118'; c.fillRect(0, 0, cv.width, cv.height);
+    var grad = c.createLinearGradient(0, 0, 0, cv.height);
+    grad.addColorStop(0, '#c99a62'); grad.addColorStop(1, '#b07c40');
+    c.fillStyle = grad; c.fillRect(0.3*s, 0.3*s, 29.4*s, 16.4*s);
+    c.strokeStyle = 'rgba(122,85,38,0.45)'; c.lineWidth = 0.035*s;
+    for (var yy = 0.9; yy < 17; yy += 0.9){
+      c.beginPath(); c.moveTo(0.3*s, yy*s); c.lineTo(29.7*s, yy*s); c.stroke();
+    }
+    c.fillStyle = 'rgba(140,32,30,0.35)';
+    c.fillRect(1*s, 6.05*s, 5.8*s, 4.9*s);
+    c.fillRect(23.2*s, 6.05*s, 5.8*s, 4.9*s);
+    c.fillStyle = 'rgba(140,32,30,0.28)';
+    c.beginPath(); c.arc(15*s, 8.5*s, 1.8*s, 0, Math.PI*2); c.fill();
+    function half(){
+      c.strokeStyle = '#f7f3ea'; c.lineWidth = 0.09*s;
+      c.lineCap = 'round'; c.lineJoin = 'round';
+      c.strokeRect(1*s, 1*s, 28*s, 15*s);
+      c.beginPath(); c.moveTo(15*s, 1*s); c.lineTo(15*s, 16*s); c.stroke();
+      c.beginPath(); c.arc(15*s, 8.5*s, 1.8*s, 0, Math.PI*2); c.stroke();
+      c.strokeRect(1*s, 6.05*s, 5.8*s, 4.9*s);
+      c.beginPath(); c.arc(6.8*s, 8.5*s, 1.8*s, 0, Math.PI*2); c.stroke();
+      var a = Math.atan2(6.6, 1.415);
+      c.beginPath();
+      c.moveTo(1*s, 1.9*s); c.lineTo(3.99*s, 1.9*s);
+      c.arc(2.575*s, 8.5*s, 6.75*s, -a, a);
+      c.lineTo(1*s, 15.1*s);
+      c.stroke();
+      c.beginPath(); c.arc(2.575*s, 8.5*s, 1.25*s, -Math.PI/2, Math.PI/2); c.stroke();
+      c.lineWidth = 0.14*s; c.strokeStyle = '#eceff4';
+      c.beginPath(); c.moveTo(2.2*s, 7.6*s); c.lineTo(2.2*s, 9.4*s); c.stroke();
+      c.lineWidth = 0.09*s; c.strokeStyle = '#ff7043';
+      c.beginPath(); c.arc(2.575*s, 8.5*s, 0.23*s, 0, Math.PI*2); c.stroke();
+    }
+    half();
+    c.save(); c.translate(cv.width, 0); c.scale(-1, 1); half(); c.restore();
+    return new THREE.CanvasTexture(cv);
+  }
+  function makeNetTexture(){
+    var cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 64;
+    var c = cv.getContext('2d');
+    c.fillStyle = 'rgba(160,200,255,0.05)'; c.fillRect(0, 0, 64, 64);
+    c.strokeStyle = 'rgba(190,215,240,0.55)'; c.lineWidth = 1.4;
+    c.beginPath();
+    c.moveTo(0, 0.5); c.lineTo(64, 0.5);
+    c.moveTo(0.5, 0); c.lineTo(0.5, 64);
+    c.stroke();
+    var tex = new THREE.CanvasTexture(cv);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  }
+  function makeWall(w, h, netTex){
+    var tex = netTex.clone();
+    tex.needsUpdate = true;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(w * 2, h * 2);
+    return new THREE.Mesh(
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: 0.4,
+        side: THREE.DoubleSide, depthWrite: false
+      })
+    );
+  }
+  function fail3D(msg){
+    T.failed = true;
+    try {
+      if (T.renderer){
+        if (T.renderer.domElement && T.renderer.domElement.parentNode){
+          T.renderer.domElement.parentNode.removeChild(T.renderer.domElement);
+        }
+        if (T.renderer.dispose) T.renderer.dispose();
+      }
+    } catch(e){}
+    T.renderer = null; T.scene = null; T.camera = null;
+    T.controls = null; T.piecesGroup = null; T.cage = null; T.map = {};
+    T.inited = false;
+    ['camTop','camLeft','camRight','camReset','btnCage'].forEach(function(id){
+      var b = $(id); if (b) b.disabled = true;
+    });
+    var hint = $('view3dHint');
+    if (hint) hint.style.display = 'none';
+    var ov = document.createElement('div');
+    ov.className = 'err-overlay';
+    ov.textContent = msg;
+    board3d.appendChild(ov);
+    flash('3D 模式無法使用（詳見 3D 視窗內說明）', true);
+  }
+
+  function init3D(){
+    if (T.inited || T.failed) return;
+    if (typeof THREE === 'undefined'){
+      fail3D('Three.js 載入失敗（可能沒有網路或 CDN 被阻擋），3D 模式無法使用。2D 模式、動畫與所有資料功能不受影響。');
+      return;
+    }
+    if (typeof THREE.OrbitControls === 'undefined'){
+      if (window.__OC_FAILED){
+        fail3D('OrbitControls 載入失敗（CDN 被阻擋），3D 模式無法使用。2D 模式與所有資料功能不受影響。');
+      } else {
+        flash('3D 元件載入中，請稍候…', true);
+      }
+      return;
+    }
+    try {
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0d1117);
+      scene.fog = new THREE.Fog(0x0d1117, 55, 110);
+
+      var camera = new THREE.PerspectiveCamera(50, 30/17, 0.1, 300);
+      var renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      T.renderer = renderer;
+      board3d.insertBefore(renderer.domElement, board3d.firstChild);
+
+      var controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.maxDistance = 90;
+      controls.minDistance = 4;
+      controls.maxPolarAngle = Math.PI / 2 - 0.03;
+
+      scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x2a2018, 0.85));
+      var dir = new THREE.DirectionalLight(0xffffff, 0.7);
+      dir.position.set(12, 22, 8);
+      scene.add(dir);
+
+      var outer = new THREE.Mesh(
+        new THREE.PlaneGeometry(90, 60),
+        new THREE.MeshLambertMaterial({ color: 0x151a20 })
+      );
+      outer.rotation.x = -Math.PI / 2;
+      outer.position.y = -0.02;
+      scene.add(outer);
+
+      var slab = new THREE.Mesh(
+        new THREE.BoxGeometry(COURT_W, 0.3, COURT_D),
+        new THREE.MeshLambertMaterial({ color: 0x3a2c1c })
+      );
+      slab.position.y = -0.16;
+      scene.add(slab);
+      var courtTex = makeCourtTexture();
+      var maxAniso = (renderer.capabilities && renderer.capabilities.getMaxAnisotropy)
+                     ? renderer.capabilities.getMaxAnisotropy() : 1;
+      courtTex.anisotropy = Math.max(1, Math.min(8, maxAniso));
+      var floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(COURT_W, COURT_D),
+        new THREE.MeshLambertMaterial({ map: courtTex })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = 0;
+      scene.add(floor);
+
+      /* 半透明網籠（可用「隱藏網籠」按鈕切換顯示） */
+      var netTex = makeNetTexture();
+      var cage = new THREE.Group();
+      var wN = makeWall(CAGE_W, CAGE_H, netTex);
+      wN.position.set(0, CAGE_H/2, -CAGE_D/2); cage.add(wN);
+      var wS = makeWall(CAGE_W, CAGE_H, netTex);
+      wS.position.set(0, CAGE_H/2, CAGE_D/2); cage.add(wS);
+      var wW = makeWall(CAGE_D, CAGE_H, netTex);
+      wW.rotation.y = Math.PI/2; wW.position.set(-CAGE_W/2, CAGE_H/2, 0); cage.add(wW);
+      var wE = makeWall(CAGE_D, CAGE_H, netTex);
+      wE.rotation.y = Math.PI/2; wE.position.set(CAGE_W/2, CAGE_H/2, 0); cage.add(wE);
+      var top = makeWall(CAGE_W, CAGE_D, netTex);
+      top.rotation.x = -Math.PI/2; top.position.set(0, CAGE_H, 0); cage.add(top);
+      var frame = new THREE.LineSegments(
+        new THREE.EdgesGeometry(new THREE.BoxGeometry(CAGE_W, CAGE_H, CAGE_D)),
+        new THREE.LineBasicMaterial({ color: 0x6f8296, transparent: true, opacity: 0.9 })
+      );
+      frame.position.y = CAGE_H / 2;
+      cage.add(frame);
+      scene.add(cage);
+      T.cage = cage;
+
+      function makeGoal(color, x){
+        var g = new THREE.Group();
+        var ring = new THREE.Mesh(
+          new THREE.TorusGeometry(0.8, 0.09, 12, 48),
+          new THREE.MeshStandardMaterial({
+            color: color, emissive: color, emissiveIntensity: 0.55,
+            roughness: 0.35, metalness: 0.3
+          })
+        );
+        ring.rotation.y = Math.PI / 2;
+        g.add(ring);
+        var glow = new THREE.Mesh(
+          new THREE.TorusGeometry(0.8, 0.2, 10, 48),
+          new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.16 })
+        );
+        glow.rotation.y = Math.PI / 2;
+        g.add(glow);
+        g.position.set(x, 2.5, 0);
+        return g;
+      }
+      scene.add(makeGoal(0xff5546, -12.4));
+      scene.add(makeGoal(0x3ba0ff,  12.4));
+
+      T.piecesGroup = new THREE.Group();
+      scene.add(T.piecesGroup);
+
+      T.scene = scene; T.camera = camera; T.controls = controls;
+      T.inited = true;
+
+      setCamPreset('reset');
+      resize3D();
+      window.addEventListener('resize', resize3D);
+      if (typeof ResizeObserver !== 'undefined'){
+        new ResizeObserver(function(){ resize3D(); }).observe(board3d);
+      }
+
+      var downPos = null;
+      renderer.domElement.addEventListener('pointerdown', function(e){
+        downPos = (e.button === 0) ? { x: e.clientX, y: e.clientY } : null;
+      });
+      renderer.domElement.addEventListener('pointerup', function(e){
+        if (!downPos) return;
+        var moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+        downPos = null;
+        if (moved > 6) return;
+        var rect = renderer.domElement.getBoundingClientRect();
+        var ndc = new THREE.Vector2(
+          ((e.clientX - rect.left) / rect.width) * 2 - 1,
+          -((e.clientY - rect.top) / rect.height) * 2 + 1
+        );
+        var ray = new THREE.Raycaster();
+        ray.setFromCamera(ndc, camera);
+        var hits = ray.intersectObjects(T.piecesGroup.children, true);
+        var id = null;
+        for (var i = 0; i < hits.length; i++){
+          var o = hits[i].object;
+          while (o && !o.userData.pieceId) o = o.parent;
+          if (o && o.userData.pieceId){ id = o.userData.pieceId; break; }
+        }
+        selectPiece(id);
+      });
+      renderer.domElement.addEventListener('pointercancel', function(){ downPos = null; });
+
+      sync3D();
+
+      (function loop(){
+        requestAnimationFrame(loop);
+        if (mode === '3d' && T.inited){
+          controls.update();
+          renderer.render(scene, camera);
+        }
+      })();
+
+    } catch(err){
+      fail3D('3D 初始化失敗：' + (err && err.message ? err.message : err) +
+             '。瀏覽器可能不支援 WebGL。2D 模式與所有資料功能不受影響。');
+    }
+  }
+
+  function resize3D(){
+    if (!T.inited) return;
+    var w = board3d.clientWidth, h = board3d.clientHeight;
+    if (w < 2 || h < 2) return;
+    T.camera.aspect = w / h;
+    T.camera.updateProjectionMatrix();
+    T.renderer.setSize(w, h, false);
+  }
+
+  function drawLabel(g, text){
+    var c = g.userData.labelCtx, cv = c.canvas;
+    c.clearRect(0, 0, cv.width, cv.height);
+    c.fillStyle = 'rgba(8,12,18,0.78)';
+    var w = cv.width, h = cv.height, r = 26;
+    c.beginPath();
+    c.moveTo(r, 4); c.lineTo(w-r, 4); c.quadraticCurveTo(w-4, 4, w-4, h/2);
+    c.quadraticCurveTo(w-4, h-4, w-r, h-4); c.lineTo(r, h-4);
+    c.quadraticCurveTo(4, h-4, 4, h/2); c.quadraticCurveTo(4, 4, r, 4);
+    c.fill();
+    c.font = 'bold 30px "Noto Sans TC","Microsoft JhengHei",sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = '#e8edf3';
+    c.fillText(text, w/2, h/2 + 1);
+    g.userData.labelTex.needsUpdate = true;
+  }
+
+  function buildPiece3D(p){
+    var g = new THREE.Group();
+    g.userData.pieceId = p.id;
+    g.userData.team = p.team;
+    var hex = TEAM_HEX[p.team];
+
+    var body = new THREE.Group();
+    if (p.team === 'ball'){
+      body.add(new THREE.Mesh(
+        new THREE.SphereGeometry(0.42, 22, 16),
+        new THREE.MeshStandardMaterial({ color: hex, roughness: 0.45, metalness: 0.1 })
+      ));
+    } else {
+      var ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.45, 0.13, 10, 26),
+        new THREE.MeshStandardMaterial({ color: hex, roughness: 0.5, metalness: 0.15 })
+      );
+      ring.rotation.x = Math.PI / 2;
+      body.add(ring);
+      body.add(new THREE.Mesh(
+        new THREE.SphereGeometry(0.2, 14, 10),
+        new THREE.MeshStandardMaterial({ color: 0x22262c, roughness: 0.7 })
+      ));
+      /* 機頭指示（顯示旋轉角度，0° = +X 朝右） */
+      var nose = new THREE.Mesh(
+        new THREE.ConeGeometry(0.09, 0.24, 10),
+        new THREE.MeshStandardMaterial({
+          color: 0xf3f6fa, emissive: 0x666a70, emissiveIntensity: 0.4, roughness: 0.4
+        })
+      );
+      nose.rotation.z = -Math.PI / 2;
+      nose.position.set(0.55, 0, 0);
+      body.add(nose);
+    }
+    var sel = new THREE.Mesh(
+      new THREE.TorusGeometry(0.68, 0.055, 10, 36),
+      new THREE.MeshBasicMaterial({ color: 0xffd60a })
+    );
+    sel.rotation.x = Math.PI / 2;
+    sel.visible = false;
+    body.add(sel);
+    var selGlow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.72, 18, 14),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd60a, transparent: true, opacity: 0.14,
+        side: THREE.BackSide, depthWrite: false
+      })
+    );
+    selGlow.visible = false;
+    body.add(selGlow);
+    g.add(body);
+
+    var shadow = new THREE.Mesh(
+      new THREE.CircleGeometry(0.45, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false
+      })
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.position.y = 0.015;
+    g.add(shadow);
+
+    var lineGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0.02, 0), new THREE.Vector3(0, 1, 0)
+    ]);
+    var line = new THREE.Line(lineGeo, new THREE.LineDashedMaterial({
+      color: 0xdfe6ee, dashSize: 0.16, gapSize: 0.12,
+      transparent: true, opacity: 0.65
+    }));
+    line.computeLineDistances();
+    g.add(line);
+
+    var cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 56;
+    var tex = new THREE.CanvasTexture(cv);
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthWrite: false
+    }));
+    sprite.scale.set(2.3, 0.5, 1);
+    g.add(sprite);
+
+    g.userData.body = body;
+    g.userData.shadow = shadow;
+    g.userData.line = line;
+    g.userData.selRing = sel;
+    g.userData.selGlow = selGlow;
+    g.userData.label = sprite;
+    g.userData.labelCtx = cv.getContext('2d');
+    g.userData.labelTex = tex;
+    g.userData.labelText = '';
+    return g;
+  }
+
+  function removePiece3D(id){
+    var g = T.map[id];
+    if (!g) return;
+    T.piecesGroup.remove(g);
+    disposeObj(g);
+    delete T.map[id];
+  }
+
+  function sync3D(){
+    if (!T.inited) return;
+    var seen = {};
+    pieces.forEach(function(p){
+      seen[p.id] = true;
+      var g = T.map[p.id];
+      if (g && g.userData.team !== p.team){ removePiece3D(p.id); g = null; }
+      if (!g){
+        g = buildPiece3D(p);
+        T.map[p.id] = g;
+        T.piecesGroup.add(g);
+      }
+      var w = toWorld(p);
+      var h = Math.max(0, p.height);
+      var bodyY = Math.max(h, 0.22);
+      g.position.set(w.x, 0, w.z);
+      g.userData.body.position.y = bodyY;
+      g.userData.body.rotation.y = -p.rot * DEG;
+      var pos = g.userData.line.geometry.attributes.position;
+      pos.setY(1, Math.max(bodyY - 0.2, 0.05));
+      pos.needsUpdate = true;
+      g.userData.line.computeLineDistances();
+      var sc = 1 + h * 0.09;
+      g.userData.shadow.scale.set(sc, sc, 1);
+      g.userData.shadow.material.opacity = clamp(0.38 - h * 0.05, 0.08, 0.38, 0.2);
+      var text = p.name + '  ' + p.height.toFixed(1) + 'm';
+      if (g.userData.labelText !== text){
+        g.userData.labelText = text;
+        drawLabel(g, text);
+      }
+      g.userData.label.position.y = bodyY + 0.95;
+      var isSel = (p.id === selectedId);
+      g.userData.selRing.visible = isSel;
+      g.userData.selGlow.visible = isSel;
+    });
+    Object.keys(T.map).forEach(function(id){
+      if (!seen[id]) removePiece3D(id);
+    });
+  }
+
+  function setCamPreset(kind){
+    if (!T.inited) return;
+    var c = T.camera, t = T.controls;
+    if (kind === 'top'){       c.position.set(0, 32, 0.01); t.target.set(0, 0, 0); }
+    else if (kind === 'left'){ c.position.set(-27, 8, 0);   t.target.set(0, 1.5, 0); }
+    else if (kind === 'right'){c.position.set(27, 8, 0);    t.target.set(0, 1.5, 0); }
+    else {                     c.position.set(0, 17, 21);   t.target.set(0, 1, 0); }
+    t.update();
+  }
+  $('camTop').addEventListener('click', function(){ setCamPreset('top'); });
+  $('camLeft').addEventListener('click', function(){ setCamPreset('left'); });
+  $('camRight').addEventListener('click', function(){ setCamPreset('right'); });
+  $('camReset').addEventListener('click', function(){ setCamPreset('reset'); });
+  $('btnCage').addEventListener('click', function(){
+    if (!T.inited || !T.cage){ flash('請先進入 3D 模式', true); return; }
+    T.cage.visible = !T.cage.visible;
+    this.textContent = T.cage.visible ? '隱藏網籠' : '顯示網籠';
+  });
+
+  /* ---- 模式切換（不重設任何棋子與步驟資料）---- */
+  var btnMode2d = $('btnMode2d'), btnMode3d = $('btnMode3d');
+  function setMode(m){
+    mode = m;
+    board.classList.toggle('hidden', m === '3d');
+    board3d.classList.toggle('hidden', m !== '3d');
+    btnMode2d.classList.toggle('primary', m === '2d');
+    btnMode3d.classList.toggle('primary', m === '3d');
+    if (m === '3d'){
+      init3D();
+      resize3D();
+      sync3D();
+    }
+  }
+  btnMode2d.addEventListener('click', function(){ setMode('2d'); });
+  btnMode3d.addEventListener('click', function(){ setMode('3d'); });
+
+  window.__on3DLib = function(ok){
+    if (mode !== '3d' || T.inited || T.failed) return;
+    init3D();
+    if (ok && T.inited){
+      resize3D();
+      sync3D();
+      flash('3D 元件已載入');
+    }
+  };
+
+  /* ============ 初始化 ============ */
+  (function init(){
+    var loaded = false;
+    try {
+      var s = localStorage.getItem(STORAGE_KEY);
+      if (s){ applyData(JSON.parse(s)); loaded = true; }
+    } catch(err){ /* 忽略，改用預設 */ }
+    if (!loaded) pieces = defaultPieces();
+    renderAll();
+    renderTimeline();
+    flash(loaded ? '已自動載入上次存檔' : '已載入預設佈局');
+  })();
+})();
+</script>
+</body>
+</html>
